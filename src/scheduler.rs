@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use rand::Rng;
 
@@ -33,20 +33,14 @@ pub struct DailyPlan {
 // Time helpers
 // ---------------------------------------------------------------------------
 
-/// Returns the current local hour offset in seconds by checking the local time
-/// vs UTC. We approximate by using the system timezone offset.
-/// Since Rust std has no timezone support, we use UTC for scheduling logic
-/// (acceptable for this use case where users configure explicit times).
+/// Returns the current local date/time using the Windows GetLocalTime API.
 pub fn current_datetime() -> DateTime {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    use windows::Win32::System::SystemInformation::GetLocalTime;
 
-    // Day of week: epoch (Jan 1 1970) was a Thursday = 4
-    // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
-    let day_of_week = ((secs / 86400 + 4) % 7) as u8;
-    let weekday = match day_of_week {
+    let st = unsafe { GetLocalTime() };
+
+    // SYSTEMTIME.wDayOfWeek: 0=Sunday, 1=Monday, ..., 6=Saturday
+    let weekday = match st.wDayOfWeek {
         0 => Weekday::Sun,
         1 => Weekday::Mon,
         2 => Weekday::Tue,
@@ -54,14 +48,14 @@ pub fn current_datetime() -> DateTime {
         4 => Weekday::Thu,
         5 => Weekday::Fri,
         6 => Weekday::Sat,
-        _ => Weekday::Mon, // unreachable
+        _ => Weekday::Mon,
     };
 
-    let seconds_today = secs % 86400;
-    let hour = (seconds_today / 3600) as u8;
-    let minute = ((seconds_today % 3600) / 60) as u8;
-
-    DateTime { hour, minute, weekday }
+    DateTime {
+        hour: st.wHour as u8,
+        minute: st.wMinute as u8,
+        weekday,
+    }
 }
 
 /// Parse "HH:MM" into (hour, minute).
