@@ -1,6 +1,7 @@
 mod config;
 mod dictionary;
 mod input;
+mod scheduler;
 mod stealth;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
