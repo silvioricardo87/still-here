@@ -183,7 +183,7 @@ pub fn render_status(config: &Config, status: &str, uptime: Duration) {
 
     // Width of the inner area (between the box borders) is 38 characters
     print!("╔══════════════════════════════════════╗\r\n");
-    print!("║  Specter - Activity Simulator        ║\r\n");
+    print!("║  Still Here - Activity Simulator     ║\r\n");
     print!("╠══════════════════════════════════════╣\r\n");
     print!(
         "║  Status:   {:<26}║\r\n",

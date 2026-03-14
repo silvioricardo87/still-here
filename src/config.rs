@@ -199,7 +199,7 @@ impl Config {
 // ---------------------------------------------------------------------------
 
 #[derive(Parser, Debug)]
-#[command(name = "WinServiceHost", about = "Specter — stealth activity simulator")]
+#[command(name = "WinServiceHost", about = "Still Here — stealth activity simulator")]
 pub struct CliArgs {
     /// Show the console window (default: hidden)
     #[arg(long)]

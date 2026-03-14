@@ -236,7 +236,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "specter"
+name = "still-here"
 version = "0.1.0"
 dependencies = [
  "bincode",
