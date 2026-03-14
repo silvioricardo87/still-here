@@ -1,4 +1,29 @@
+# Build
 /target
+
+# Docs (generated/reference only)
 /docs
+
+# Claude Code
 /.claude
 CLAUDE.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Rust
+**/*.rs.bk
+*.pdb
+
+# Runtime config (bincode saved to %TEMP%)
+wsh.dat
