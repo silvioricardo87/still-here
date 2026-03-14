@@ -18,6 +18,20 @@ const IDLE_THRESHOLD_MS: u32 = 60_000;
 /// Tick count of our last simulated input (updated after every SendInput we issue).
 static LAST_SIMULATED_TICK: AtomicU32 = AtomicU32::new(0);
 
+/// Session counters for GUI display.
+static KEYSTROKE_COUNT: AtomicU32 = AtomicU32::new(0);
+static MOUSE_MOVE_COUNT: AtomicU32 = AtomicU32::new(0);
+
+/// Returns the total number of simulated keystrokes this session.
+pub fn keystroke_count() -> u32 {
+    KEYSTROKE_COUNT.load(Ordering::Relaxed)
+}
+
+/// Returns the total number of simulated mouse moves this session.
+pub fn mouse_move_count() -> u32 {
+    MOUSE_MOVE_COUNT.load(Ordering::Relaxed)
+}
+
 /// Records the current tick count as the time of our last simulated input.
 fn mark_simulated() {
     let tick = unsafe { windows::Win32::System::SystemInformation::GetTickCount() };
@@ -111,6 +125,7 @@ pub fn send_silent_keystroke() {
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
     }
     mark_simulated();
+    KEYSTROKE_COUNT.fetch_add(1, Ordering::Relaxed);
 }
 
 /// Returns a random inter-character delay in ms (40–250ms).
@@ -195,6 +210,7 @@ pub fn move_mouse_silent() {
     sleep(Duration::from_millis(50));
     send_mouse_move_relative(-dx, -dy);
     mark_simulated();
+    MOUSE_MOVE_COUNT.fetch_add(1, Ordering::Relaxed);
 }
 
 #[cfg(test)]
@@ -217,5 +233,16 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_keystroke_count_returns_value() {
+        // Counter starts at 0 or whatever accumulated in this test run
+        let count = keystroke_count();
+        assert!(count < u32::MAX);
+    }
 
+    #[test]
+    fn test_mouse_move_count_returns_value() {
+        let count = mouse_move_count();
+        assert!(count < u32::MAX);
+    }
 }
