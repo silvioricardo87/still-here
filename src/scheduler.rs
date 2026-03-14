@@ -30,6 +30,7 @@ pub fn user_is_paused() -> bool {
 }
 
 /// Returns a human-readable label for the given cycle constant.
+#[cfg(test)]
 pub fn cycle_label(cycle: u8) -> &'static str {
     match cycle {
         CYCLE_IDLE => "Idle",

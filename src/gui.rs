@@ -553,7 +553,8 @@ pub fn status_dot_color(cycle: u8, user_paused: bool) -> u32 {
 }
 
 /// Returns the status text for the current state (English, used by tests).
-pub fn status_text(cycle: u8, user_paused: bool) -> &'static str {
+#[cfg(test)]
+fn status_text(cycle: u8, user_paused: bool) -> &'static str {
     if user_paused {
         return "User Active \u{2014} Paused";
     }

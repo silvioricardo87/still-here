@@ -52,6 +52,7 @@ impl HotkeyModifiers {
     pub const WIN: HotkeyModifiers = HotkeyModifiers(0x0008);
     pub const NONE: HotkeyModifiers = HotkeyModifiers(0x0000);
 
+    #[cfg(test)]
     pub fn contains(self, other: HotkeyModifiers) -> bool {
         (self.0 & other.0) == other.0
     }
