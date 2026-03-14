@@ -8,6 +8,9 @@
 /.claude
 CLAUDE.md
 
+# Superpowers brainstorming
+.superpowers/
+
 # IDE
 .vscode/
 .idea/

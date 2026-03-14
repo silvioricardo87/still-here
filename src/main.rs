@@ -1,5 +1,6 @@
 mod config;
 mod dictionary;
+mod gui;
 mod input;
 mod scheduler;
 mod stealth;
@@ -13,7 +14,7 @@ use windows::Win32::Foundation::{BOOL, LPARAM, TRUE, WPARAM};
 use windows::Win32::System::Console::SetConsoleCtrlHandler;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetMessageW, PostThreadMessageW, MSG, WM_HOTKEY, WM_QUIT,
+    DispatchMessageW, GetMessageW, PostThreadMessageW, TranslateMessage, MSG, WM_HOTKEY, WM_QUIT,
 };
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
@@ -37,15 +38,25 @@ fn run_message_pump(shutdown: &'static AtomicBool) {
     unsafe {
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
             if msg.message == WM_HOTKEY {
-                stealth::toggle_console();
+                gui::toggle_gui();
             }
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
         shutdown.store(true, Ordering::SeqCst);
     }
 }
 
 fn main() {
-    // 1. Parse config
+    // 1. Enable DPI awareness
+    unsafe {
+        use windows::Win32::UI::HiDpi::{
+            SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+        };
+        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+
+    // 2. Parse config
     let args = CliArgs::parse();
     let mut config = Config::load();
     config.merge_cli(&args);
@@ -58,11 +69,11 @@ fn main() {
         return;
     }
 
-    // 2. Store main thread ID (needed for PostThreadMessage from ctrl handler)
+    // 3. Store main thread ID (needed for PostThreadMessage from ctrl handler)
     let main_tid = unsafe { GetCurrentThreadId() };
     MAIN_THREAD_ID.store(main_tid, Ordering::SeqCst);
 
-    // 3. Register hotkey (MUST succeed before hiding console)
+    // 4. Register hotkey (MUST succeed before hiding console)
     match stealth::register_hotkey(&config.hotkey) {
         Ok(key) => {
             if key != config.hotkey {
@@ -75,42 +86,40 @@ fn main() {
         }
     }
 
-    // 4. Hide console (after hotkey is confirmed registered)
-    if !config.visible {
-        stealth::hide_console();
-    }
+    // 5. Always hide the console (GUI replaces it)
+    stealth::hide_console();
 
-    // 5. Register Ctrl+C handler
+    // 6. Register Ctrl+C handler
     setup_ctrl_handler();
 
-    // 6. Start keep-alive thread
+    // 7. Start keep-alive thread
     stealth::start_keep_alive_thread(&SHUTDOWN);
 
-    // 7. Start activity thread
+    // 8. Create GUI window on main thread
+    let start_time = Instant::now();
+    gui::register_window_class();
+    gui::create_gui_window(&config, start_time);
+
+    // 9. Show GUI if --visible
+    if config.visible {
+        gui::show_gui();
+    }
+
+    // 10. Start activity thread
     let sched_config = config.clone();
     std::thread::spawn(move || {
         scheduler::run_scheduler(sched_config, &SHUTDOWN);
     });
 
-    // 8. Start console input thread
+    // 11. Start console input thread (still needed for Q to quit)
     stealth::start_console_input_thread(main_tid, &SHUTDOWN);
 
-    // 9. Start display refresh thread
-    let display_config = config.clone();
-    let start_time = Instant::now();
-    std::thread::spawn(move || {
-        while !SHUTDOWN.load(Ordering::SeqCst) {
-            if stealth::is_console_visible() {
-                stealth::render_status(&display_config, "Active", start_time.elapsed());
-            }
-            std::thread::sleep(std::time::Duration::from_secs(2));
-        }
-    });
-
-    // 10. Run message pump (blocks until WM_QUIT)
+    // 12. Run message pump (blocks until WM_QUIT)
+    // WM_TIMER for GUI repaint is handled automatically via DispatchMessageW
     run_message_pump(&SHUTDOWN);
 
-    // 11. Cleanup
+    // 13. Cleanup
+    gui::destroy_gui();
     stealth::unregister_hotkey();
     stealth::restore_sleep();
 }

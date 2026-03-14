@@ -1,9 +1,46 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::Duration;
 
 use rand::Rng;
 
 use crate::config::{Config, Schedule, Weekday};
+
+// ---------------------------------------------------------------------------
+// Shared state for GUI display
+// ---------------------------------------------------------------------------
+
+pub const CYCLE_IDLE: u8 = 0;
+pub const CYCLE_ACTIVE: u8 = 1;
+pub const CYCLE_INACTIVE: u8 = 2;
+pub const CYCLE_LONG_PAUSE: u8 = 3;
+pub const CYCLE_LUNCH: u8 = 4;
+pub const CYCLE_OUTSIDE_HOURS: u8 = 5;
+
+static CURRENT_CYCLE: AtomicU8 = AtomicU8::new(CYCLE_IDLE);
+static USER_IS_PAUSED: AtomicBool = AtomicBool::new(false);
+
+/// Returns the current cycle as a u8 constant.
+pub fn current_cycle() -> u8 {
+    CURRENT_CYCLE.load(Ordering::Relaxed)
+}
+
+/// Returns true if simulation is paused because user is active.
+pub fn user_is_paused() -> bool {
+    USER_IS_PAUSED.load(Ordering::Relaxed)
+}
+
+/// Returns a human-readable label for the given cycle constant.
+pub fn cycle_label(cycle: u8) -> &'static str {
+    match cycle {
+        CYCLE_IDLE => "Idle",
+        CYCLE_ACTIVE => "Active",
+        CYCLE_INACTIVE => "Inactive",
+        CYCLE_LONG_PAUSE => "Long Pause",
+        CYCLE_LUNCH => "Lunch",
+        CYCLE_OUTSIDE_HOURS => "Outside Hours",
+        _ => "Unknown",
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -220,12 +257,15 @@ pub fn run_scheduler(config: Config, shutdown: &'static AtomicBool) {
         }
 
         // --- Pause while user is active ---
+        USER_IS_PAUSED.store(crate::input::user_is_active(), Ordering::Relaxed);
         if pause_if_user_active(shutdown) {
             break;
         }
+        USER_IS_PAUSED.store(false, Ordering::Relaxed);
 
         // --- Outside business hours (Business schedule only) ---
         if config.schedule == Schedule::Business && !is_business_hours(&config, &now) {
+            CURRENT_CYCLE.store(CYCLE_OUTSIDE_HOURS, Ordering::Relaxed);
             // Silent mouse jitter every 3–5 minutes, no typing
             if config.mouse {
                 crate::input::move_mouse_silent();
@@ -239,6 +279,7 @@ pub fn run_scheduler(config: Config, shutdown: &'static AtomicBool) {
 
         // --- Lunch time ---
         if is_lunch_time(&config, &now) {
+            CURRENT_CYCLE.store(CYCLE_LUNCH, Ordering::Relaxed);
             // Silent mouse jitter every 2–4 minutes, no typing
             if config.mouse {
                 crate::input::move_mouse_silent();
@@ -255,12 +296,15 @@ pub fn run_scheduler(config: Config, shutdown: &'static AtomicBool) {
 
         match cycle {
             ActivityCycle::Active(duration) => {
+                CURRENT_CYCLE.store(CYCLE_ACTIVE, Ordering::Relaxed);
                 run_active_cycle(duration, &config, shutdown, &mut daily_plan);
             }
             ActivityCycle::Inactive(duration) => {
+                CURRENT_CYCLE.store(CYCLE_INACTIVE, Ordering::Relaxed);
                 run_inactive_cycle(duration, &config, shutdown);
             }
             ActivityCycle::LongPause(duration) => {
+                CURRENT_CYCLE.store(CYCLE_LONG_PAUSE, Ordering::Relaxed);
                 daily_plan.long_pauses_used += 1;
                 run_long_pause_cycle(duration, &config, shutdown);
             }
@@ -600,5 +644,29 @@ mod tests {
         let plan = generate_daily_plan();
         assert_eq!(plan.long_pauses_used, 0);
         assert!(plan.long_pause_count >= 1 && plan.long_pause_count <= 3);
+    }
+
+    #[test]
+    fn test_cycle_label_all_values() {
+        assert_eq!(cycle_label(CYCLE_IDLE), "Idle");
+        assert_eq!(cycle_label(CYCLE_ACTIVE), "Active");
+        assert_eq!(cycle_label(CYCLE_INACTIVE), "Inactive");
+        assert_eq!(cycle_label(CYCLE_LONG_PAUSE), "Long Pause");
+        assert_eq!(cycle_label(CYCLE_LUNCH), "Lunch");
+        assert_eq!(cycle_label(CYCLE_OUTSIDE_HOURS), "Outside Hours");
+        assert_eq!(cycle_label(255), "Unknown");
+    }
+
+    #[test]
+    fn test_current_cycle_default() {
+        // Default should be CYCLE_IDLE (0)
+        let cycle = current_cycle();
+        assert!(cycle <= CYCLE_OUTSIDE_HOURS);
+    }
+
+    #[test]
+    fn test_user_is_paused_default() {
+        // We can't control the static in tests, but it should return a bool
+        let _paused = user_is_paused();
     }
 }

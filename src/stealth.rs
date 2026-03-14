@@ -39,6 +39,7 @@ pub fn hide_console() {
 }
 
 /// Shows and focuses the console window.
+#[allow(dead_code)]
 pub fn show_console() {
     unsafe {
         let hwnd: HWND = GetConsoleWindow();
@@ -51,6 +52,7 @@ pub fn show_console() {
 }
 
 /// Returns true if the console window is currently visible.
+#[allow(dead_code)]
 pub fn is_console_visible() -> bool {
     unsafe {
         let hwnd: HWND = GetConsoleWindow();
@@ -62,6 +64,7 @@ pub fn is_console_visible() -> bool {
 }
 
 /// Toggles the console window visibility.
+#[allow(dead_code)]
 pub fn toggle_console() {
     if is_console_visible() {
         hide_console();
@@ -150,6 +153,7 @@ pub fn unregister_hotkey() {
 
 /// Renders a status panel to the console by repositioning the cursor to (0,0)
 /// and overwriting all lines. This avoids flicker from a full clear.
+#[allow(dead_code)]
 pub fn render_status(config: &Config, status: &str, uptime: Duration) {
     let total_secs = uptime.as_secs();
     let hours = total_secs / 3600;
