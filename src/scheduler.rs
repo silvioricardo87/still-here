@@ -170,6 +170,16 @@ fn sleep_interruptible(seconds: u64, shutdown: &AtomicBool) -> bool {
     false
 }
 
+/// If the user is actively using the computer, pauses simulation until they
+/// have been idle for the configured threshold. Returns true if shutdown was
+/// requested during the wait.
+fn pause_if_user_active(shutdown: &AtomicBool) -> bool {
+    if crate::input::user_is_active() {
+        crate::input::wait_for_user_idle(shutdown);
+    }
+    shutdown.load(Ordering::Relaxed)
+}
+
 // ---------------------------------------------------------------------------
 // Main scheduler loop
 // ---------------------------------------------------------------------------
@@ -209,11 +219,16 @@ pub fn run_scheduler(config: Config, shutdown: &'static AtomicBool) {
             }
         }
 
+        // --- Pause while user is active ---
+        if pause_if_user_active(shutdown) {
+            break;
+        }
+
         // --- Outside business hours (Business schedule only) ---
         if config.schedule == Schedule::Business && !is_business_hours(&config, &now) {
-            // Mouse subtle every 3–5 minutes, no typing
+            // Silent mouse jitter every 3–5 minutes, no typing
             if config.mouse {
-                crate::input::move_mouse_subtle();
+                crate::input::move_mouse_silent();
             }
             let delay = rng.gen_range(180u64..=300u64);
             if sleep_interruptible(delay, shutdown) {
@@ -224,9 +239,9 @@ pub fn run_scheduler(config: Config, shutdown: &'static AtomicBool) {
 
         // --- Lunch time ---
         if is_lunch_time(&config, &now) {
-            // Mouse subtle every 2–4 minutes, no typing
+            // Silent mouse jitter every 2–4 minutes, no typing
             if config.mouse {
-                crate::input::move_mouse_subtle();
+                crate::input::move_mouse_silent();
             }
             let delay = rng.gen_range(120u64..=240u64);
             if sleep_interruptible(delay, shutdown) {
@@ -283,22 +298,27 @@ fn run_active_cycle(
             return;
         }
 
+        // --- Pause while user is active ---
+        if pause_if_user_active(shutdown) {
+            return;
+        }
+
         let time_left = duration.saturating_sub(elapsed());
         let winding_down = elapsed() >= wind_down_start;
 
-        // --- Typing ---
+        // --- Typing (silent keystrokes at human-like intervals) ---
         if config.typing {
             let phrase = crate::dictionary::random_phrase(config.language.clone());
-            crate::input::type_phrase(phrase, shutdown);
+            crate::input::simulate_typing_activity(phrase, shutdown);
             if shutdown.load(Ordering::Relaxed) {
                 return;
             }
             phrases_in_block += 1;
         }
 
-        // --- Mouse movement during active cycle ---
+        // --- Mouse movement (imperceptible micro-jitter) ---
         if config.mouse {
-            crate::input::move_mouse(config.mouse_mode.clone());
+            crate::input::move_mouse_silent();
         }
 
         // --- Block pause after every 3–8 phrases ---
@@ -344,12 +364,15 @@ fn run_inactive_cycle(duration: u64, config: &Config, shutdown: &'static AtomicB
         if shutdown.load(Ordering::Relaxed) {
             return;
         }
-
-        if config.mouse {
-            crate::input::move_mouse_subtle();
+        if pause_if_user_active(shutdown) {
+            return;
         }
 
-        // Wait 30–90s before next subtle move
+        if config.mouse {
+            crate::input::move_mouse_silent();
+        }
+
+        // Wait 30–90s before next silent move
         let time_left = duration.saturating_sub(start.elapsed().as_secs());
         let delay = rng.gen_range(30u64..=90u64).min(time_left.max(1));
         if sleep_interruptible(delay, shutdown) {
@@ -366,12 +389,15 @@ fn run_long_pause_cycle(duration: u64, config: &Config, shutdown: &'static Atomi
         if shutdown.load(Ordering::Relaxed) {
             return;
         }
-
-        if config.mouse {
-            crate::input::move_mouse_subtle();
+        if pause_if_user_active(shutdown) {
+            return;
         }
 
-        // Wait 2–4 minutes before next subtle move
+        if config.mouse {
+            crate::input::move_mouse_silent();
+        }
+
+        // Wait 2–4 minutes before next silent move
         let time_left = duration.saturating_sub(start.elapsed().as_secs());
         let delay = rng.gen_range(120u64..=240u64).min(time_left.max(1));
         if sleep_interruptible(delay, shutdown) {

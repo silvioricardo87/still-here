@@ -18,7 +18,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_HIDE, SW_SHOW, WM_QUIT, WS_EX_TOOLWINDOW,
 };
 
-use crate::config::{Config, MouseMode, Schedule};
+use crate::config::{Config, Schedule};
 
 /// Hides the console window and removes it from Alt+Tab and the taskbar.
 pub fn hide_console() {
@@ -157,15 +157,7 @@ pub fn render_status(config: &Config, status: &str, uptime: Duration) {
     let seconds = total_secs % 60;
 
     let typing_str = if config.typing { "ON" } else { "OFF" };
-    let mouse_str = if config.mouse {
-        match config.mouse_mode {
-            MouseMode::Subtle => "ON (subtle)",
-            MouseMode::Wide => "ON (wide)",
-            MouseMode::Mixed => "ON (mixed)",
-        }
-    } else {
-        "OFF"
-    };
+    let mouse_str = if config.mouse { "ON (silent)" } else { "OFF" };
     let schedule_str = match config.schedule {
         Schedule::Always => "always".to_string(),
         Schedule::Business => format!(
