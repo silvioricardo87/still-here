@@ -388,4 +388,50 @@ mod tests {
         let unique: std::collections::HashSet<&&str> = phrases.iter().collect();
         assert!(unique.len() >= 2);
     }
+
+    #[test]
+    fn test_random_phrase_en_returns_different_results() {
+        let phrases: Vec<&str> = (0..10).map(|_| random_phrase(Language::En)).collect();
+        let unique: std::collections::HashSet<&&str> = phrases.iter().collect();
+        assert!(unique.len() >= 2);
+    }
+
+    #[test]
+    fn test_random_phrase_returns_non_empty() {
+        for _ in 0..50 {
+            let phrase = random_phrase(Language::PtBr);
+            assert!(!phrase.is_empty());
+            let phrase = random_phrase(Language::En);
+            assert!(!phrase.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_all_phrases_are_non_empty() {
+        for phrase in get_phrases(Language::PtBr) {
+            assert!(!phrase.is_empty(), "Found empty pt-br phrase");
+        }
+        for phrase in get_phrases(Language::En) {
+            assert!(!phrase.is_empty(), "Found empty en phrase");
+        }
+    }
+
+    #[test]
+    fn test_get_phrases_returns_correct_arrays() {
+        let pt = get_phrases(Language::PtBr);
+        let en = get_phrases(Language::En);
+        // pt-br should have more phrases than en
+        assert!(pt.len() > en.len());
+    }
+
+    #[test]
+    fn test_no_duplicate_phrases() {
+        let pt = get_phrases(Language::PtBr);
+        let unique: std::collections::HashSet<&&str> = pt.iter().collect();
+        assert_eq!(pt.len(), unique.len(), "Found duplicate pt-br phrases");
+
+        let en = get_phrases(Language::En);
+        let unique: std::collections::HashSet<&&str> = en.iter().collect();
+        assert_eq!(en.len(), unique.len(), "Found duplicate en phrases");
+    }
 }

@@ -405,4 +405,215 @@ mod tests {
     fn test_parse_schedule_days_invalid() {
         assert!(parse_schedule_days("mon,invalid").is_err());
     }
+
+    #[test]
+    fn test_parse_schedule_days_full_names() {
+        let days = parse_schedule_days("monday,wednesday,friday").unwrap();
+        assert_eq!(days, vec![Weekday::Mon, Weekday::Wed, Weekday::Fri]);
+    }
+
+    #[test]
+    fn test_parse_schedule_days_weekend() {
+        let days = parse_schedule_days("sat,sun").unwrap();
+        assert_eq!(days, vec![Weekday::Sat, Weekday::Sun]);
+    }
+
+    #[test]
+    fn test_parse_schedule_days_all_days() {
+        let days = parse_schedule_days("mon,tue,wed,thu,fri,sat,sun").unwrap();
+        assert_eq!(days.len(), 7);
+    }
+
+    #[test]
+    fn test_parse_schedule_days_with_spaces() {
+        let days = parse_schedule_days("mon , wed , fri").unwrap();
+        assert_eq!(days, vec![Weekday::Mon, Weekday::Wed, Weekday::Fri]);
+    }
+
+    #[test]
+    fn test_parse_hotkey_with_alt() {
+        let (mods, vk) = parse_hotkey("Alt+Shift+F1").unwrap();
+        assert!(mods.contains(HotkeyModifiers::ALT));
+        assert!(mods.contains(HotkeyModifiers::SHIFT));
+        assert_eq!(vk, 0x70); // VK_F1
+    }
+
+    #[test]
+    fn test_parse_hotkey_with_win() {
+        let (mods, _vk) = parse_hotkey("Win+A").unwrap();
+        assert!(mods.contains(HotkeyModifiers::WIN));
+    }
+
+    #[test]
+    fn test_parse_hotkey_letter_key() {
+        let (mods, vk) = parse_hotkey("Ctrl+A").unwrap();
+        assert!(mods.contains(HotkeyModifiers::CONTROL));
+        assert_eq!(vk, b'A' as u16);
+    }
+
+    #[test]
+    fn test_parse_hotkey_digit_key() {
+        let (mods, vk) = parse_hotkey("Ctrl+5").unwrap();
+        assert!(mods.contains(HotkeyModifiers::CONTROL));
+        assert_eq!(vk, b'5' as u16);
+    }
+
+    #[test]
+    fn test_parse_hotkey_all_function_keys() {
+        for n in 1..=12u16 {
+            let s = format!("Ctrl+F{}", n);
+            let (_, vk) = parse_hotkey(&s).unwrap();
+            assert_eq!(vk, 0x70 + n - 1, "F{} should map to VK 0x{:02X}", n, 0x70 + n - 1);
+        }
+    }
+
+    #[test]
+    fn test_parse_hotkey_no_key() {
+        assert!(parse_hotkey("Ctrl+Shift").is_err());
+    }
+
+    #[test]
+    fn test_parse_hotkey_control_alias() {
+        let (mods, _) = parse_hotkey("Control+F1").unwrap();
+        assert!(mods.contains(HotkeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn test_parse_hotkey_windows_alias() {
+        let (mods, _) = parse_hotkey("Windows+F1").unwrap();
+        assert!(mods.contains(HotkeyModifiers::WIN));
+    }
+
+    #[test]
+    fn test_hotkey_modifiers_bitor() {
+        let combined = HotkeyModifiers::CONTROL | HotkeyModifiers::SHIFT;
+        assert!(combined.contains(HotkeyModifiers::CONTROL));
+        assert!(combined.contains(HotkeyModifiers::SHIFT));
+        assert!(!combined.contains(HotkeyModifiers::ALT));
+    }
+
+    #[test]
+    fn test_hotkey_modifiers_bitor_assign() {
+        let mut mods = HotkeyModifiers::NONE;
+        mods |= HotkeyModifiers::ALT;
+        mods |= HotkeyModifiers::SHIFT;
+        assert!(mods.contains(HotkeyModifiers::ALT));
+        assert!(mods.contains(HotkeyModifiers::SHIFT));
+        assert!(!mods.contains(HotkeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn test_merge_cli_visible() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--visible"]);
+        config.merge_cli(&args);
+        assert!(config.visible);
+    }
+
+    #[test]
+    fn test_merge_cli_no_typing_no_mouse() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--no-typing", "--no-mouse"]);
+        config.merge_cli(&args);
+        assert!(!config.typing);
+        assert!(!config.mouse);
+    }
+
+    #[test]
+    fn test_merge_cli_mouse_mode() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--mouse-mode", "subtle"]);
+        config.merge_cli(&args);
+        assert_eq!(config.mouse_mode, MouseMode::Subtle);
+
+        let args = CliArgs::parse_from(["test", "--mouse-mode", "wide"]);
+        config.merge_cli(&args);
+        assert_eq!(config.mouse_mode, MouseMode::Wide);
+    }
+
+    #[test]
+    fn test_merge_cli_schedule_always() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--schedule", "always"]);
+        config.merge_cli(&args);
+        assert_eq!(config.schedule, Schedule::Always);
+    }
+
+    #[test]
+    fn test_merge_cli_language_en() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--language", "en"]);
+        config.merge_cli(&args);
+        assert_eq!(config.language, Language::En);
+    }
+
+    #[test]
+    fn test_merge_cli_language_ptbr_alias() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--language", "ptbr"]);
+        config.merge_cli(&args);
+        assert_eq!(config.language, Language::PtBr);
+    }
+
+    #[test]
+    fn test_merge_cli_custom_schedule_times() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from([
+            "test",
+            "--schedule-start", "08:00",
+            "--schedule-end", "17:00",
+            "--lunch-start", "12:00",
+            "--lunch-duration", "45",
+        ]);
+        config.merge_cli(&args);
+        assert_eq!(config.schedule_start, "08:00");
+        assert_eq!(config.schedule_end, "17:00");
+        assert_eq!(config.lunch_start, "12:00");
+        assert_eq!(config.lunch_duration, 45);
+    }
+
+    #[test]
+    fn test_merge_cli_schedule_days() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--schedule-days", "mon,wed,fri"]);
+        config.merge_cli(&args);
+        assert_eq!(config.schedule_days, vec![Weekday::Mon, Weekday::Wed, Weekday::Fri]);
+    }
+
+    #[test]
+    fn test_merge_cli_hotkey() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--hotkey", "Ctrl+Alt+F12"]);
+        config.merge_cli(&args);
+        assert_eq!(config.hotkey, "Ctrl+Alt+F12");
+    }
+
+    #[test]
+    fn test_merge_cli_no_args_preserves_defaults() {
+        let mut config = Config::default();
+        let original = Config::default();
+        let args = CliArgs::parse_from(["test"]);
+        config.merge_cli(&args);
+        assert_eq!(config.visible, original.visible);
+        assert_eq!(config.typing, original.typing);
+        assert_eq!(config.mouse, original.mouse);
+        assert_eq!(config.mouse_mode, original.mouse_mode);
+        assert_eq!(config.schedule, original.schedule);
+        assert_eq!(config.language, original.language);
+    }
+
+    #[test]
+    fn test_config_serialization_roundtrip() {
+        let config = Config::default();
+        let bytes = bincode::serialize(&config).unwrap();
+        let deserialized: Config = bincode::deserialize(&bytes).unwrap();
+        assert_eq!(deserialized.visible, config.visible);
+        assert_eq!(deserialized.typing, config.typing);
+        assert_eq!(deserialized.mouse, config.mouse);
+        assert_eq!(deserialized.mouse_mode, config.mouse_mode);
+        assert_eq!(deserialized.schedule, config.schedule);
+        assert_eq!(deserialized.language, config.language);
+        assert_eq!(deserialized.hotkey, config.hotkey);
+        assert_eq!(deserialized.schedule_days, config.schedule_days);
+    }
 }
