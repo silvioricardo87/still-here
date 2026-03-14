@@ -21,9 +21,119 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
-use crate::config::{Config, MouseMode, Schedule};
+use crate::config::{Config, Language, MouseMode, Schedule};
 use crate::input;
 use crate::scheduler;
+
+// ---------------------------------------------------------------------------
+// Localization
+// ---------------------------------------------------------------------------
+
+struct GuiStrings {
+    title: &'static str,
+    uptime: &'static str,
+    typing: &'static str,
+    mouse: &'static str,
+    mouse_mode: &'static str,
+    schedule: &'static str,
+    language_label: &'static str,
+    hotkey: &'static str,
+    cycle: &'static str,
+    keystrokes: &'static str,
+    mouse_moves: &'static str,
+    user: &'static str,
+    on: &'static str,
+    off: &'static str,
+    on_silent: &'static str,
+    subtle: &'static str,
+    wide: &'static str,
+    mixed: &'static str,
+    always: &'static str,
+    active_paused: &'static str,
+    idle: &'static str,
+    user_active_paused: &'static str,
+    footer_hide: &'static str,
+    footer_quit: &'static str,
+    cycle_idle: &'static str,
+    cycle_active: &'static str,
+    cycle_inactive: &'static str,
+    cycle_long_pause: &'static str,
+    cycle_lunch: &'static str,
+    cycle_outside: &'static str,
+}
+
+const STRINGS_EN: GuiStrings = GuiStrings {
+    title: "Still Here",
+    uptime: "Uptime",
+    typing: "Typing",
+    mouse: "Mouse",
+    mouse_mode: "Mouse Mode",
+    schedule: "Schedule",
+    language_label: "Language",
+    hotkey: "Hotkey",
+    cycle: "Cycle",
+    keystrokes: "Keystrokes",
+    mouse_moves: "Mouse Moves",
+    user: "User",
+    on: "ON",
+    off: "OFF",
+    on_silent: "ON (silent)",
+    subtle: "Subtle",
+    wide: "Wide",
+    mixed: "Mixed",
+    always: "Always",
+    active_paused: "Active (paused)",
+    idle: "Idle",
+    user_active_paused: "User Active \u{2014} Paused",
+    footer_hide: "to hide",
+    footer_quit: "to quit",
+    cycle_idle: "Idle",
+    cycle_active: "Active",
+    cycle_inactive: "Inactive",
+    cycle_long_pause: "Long Pause",
+    cycle_lunch: "Lunch",
+    cycle_outside: "Outside Hours",
+};
+
+const STRINGS_PT: GuiStrings = GuiStrings {
+    title: "Still Here",
+    uptime: "Ativo h\u{00e1}",
+    typing: "Digita\u{00e7}\u{00e3}o",
+    mouse: "Mouse",
+    mouse_mode: "Modo Mouse",
+    schedule: "Hor\u{00e1}rio",
+    language_label: "Idioma",
+    hotkey: "Atalho",
+    cycle: "Ciclo",
+    keystrokes: "Teclas",
+    mouse_moves: "Mov. Mouse",
+    user: "Usu\u{00e1}rio",
+    on: "SIM",
+    off: "N\u{00c3}O",
+    on_silent: "SIM (silencioso)",
+    subtle: "Sutil",
+    wide: "Amplo",
+    mixed: "Misto",
+    always: "Sempre",
+    active_paused: "Ativo (pausado)",
+    idle: "Ocioso",
+    user_active_paused: "Usu\u{00e1}rio Ativo \u{2014} Pausado",
+    footer_hide: "p/ ocultar",
+    footer_quit: "p/ sair",
+    cycle_idle: "Ocioso",
+    cycle_active: "Ativo",
+    cycle_inactive: "Inativo",
+    cycle_long_pause: "Pausa Longa",
+    cycle_lunch: "Almo\u{00e7}o",
+    cycle_outside: "Fora do Hor\u{00e1}rio",
+};
+
+fn gui_strings(lang: &Language) -> &'static GuiStrings {
+    match lang {
+        Language::PtBr => &STRINGS_PT,
+        Language::En => &STRINGS_EN,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -338,8 +448,7 @@ pub fn destroy_gui() {
 // Font creation
 // ---------------------------------------------------------------------------
 
-fn create_font(size: i32, bold: bool) -> HFONT {
-    let weight = if bold { 700 } else { 400 };
+fn create_font(size: i32, weight: i32) -> HFONT {
     let face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
     unsafe {
         CreateFontW(
@@ -443,12 +552,33 @@ pub fn status_dot_color(cycle: u8, user_paused: bool) -> u32 {
     }
 }
 
-/// Returns the status text for the current state.
+/// Returns the status text for the current state (English, used by tests).
 pub fn status_text(cycle: u8, user_paused: bool) -> &'static str {
     if user_paused {
-        return "User Active — Paused";
+        return "User Active \u{2014} Paused";
     }
     scheduler::cycle_label(cycle)
+}
+
+/// Returns the localized status text for the current state.
+fn status_text_localized(cycle: u8, user_paused: bool, s: &'static GuiStrings) -> &'static str {
+    if user_paused {
+        return s.user_active_paused;
+    }
+    cycle_label_localized(cycle, s)
+}
+
+/// Returns the localized label for the given cycle constant.
+fn cycle_label_localized(cycle: u8, s: &'static GuiStrings) -> &'static str {
+    match cycle {
+        scheduler::CYCLE_IDLE => s.cycle_idle,
+        scheduler::CYCLE_ACTIVE => s.cycle_active,
+        scheduler::CYCLE_INACTIVE => s.cycle_inactive,
+        scheduler::CYCLE_LONG_PAUSE => s.cycle_long_pause,
+        scheduler::CYCLE_LUNCH => s.cycle_lunch,
+        scheduler::CYCLE_OUTSIDE_HOURS => s.cycle_outside,
+        _ => "—",
+    }
 }
 
 /// Formats a number with thousand separators.
@@ -480,10 +610,11 @@ fn handle_paint(hwnd: HWND) {
     let pad = scaled(16, scale);
     let row_height = scaled(22, scale);
 
-    // Fonts
-    let font_title = create_font(scaled(16, scale), true);
-    let font_normal = create_font(scaled(13, scale), false);
-    let font_small = create_font(scaled(11, scale), false);
+    // Fonts: title=bold, label=semibold, value=bold, footer=semibold
+    let font_title = create_font(scaled(16, scale), 700);
+    let font_label = create_font(scaled(13, scale), 600);
+    let font_value = create_font(scaled(13, scale), 700);
+    let font_small = create_font(scaled(11, scale), 600);
 
     unsafe {
         SetBkMode(hdc, TRANSPARENT);
@@ -533,23 +664,25 @@ fn handle_paint(hwnd: HWND) {
     let minutes = (uptime.as_secs() % 3600) / 60;
     let seconds = uptime.as_secs() % 60;
 
+    let s = gui_strings(&config.language);
+
     let mut y = pad;
 
     // --- Header: Title ---
     unsafe {
         SelectObject(hdc, HGDIOBJ(font_title.0));
     }
-    draw_text(hdc, pad, y, "Still Here", theme.text);
+    draw_text(hdc, pad, y, s.title, theme.text);
     y += scaled(24, scale);
 
     // --- Status line with dot ---
     let dot_radius = scaled(5, scale);
     let dot_color = status_dot_color(cycle, user_paused);
-    let status = status_text(cycle, user_paused);
+    let status = status_text_localized(cycle, user_paused, s);
     draw_status_dot(hdc, pad, y + scaled(3, scale), dot_radius, dot_color);
 
     unsafe {
-        SelectObject(hdc, HGDIOBJ(font_normal.0));
+        SelectObject(hdc, HGDIOBJ(font_value.0));
     }
     draw_text(
         hdc,
@@ -568,69 +701,61 @@ fn handle_paint(hwnd: HWND) {
     let label_x = pad;
     let value_x = pad + scaled(100, scale);
 
+    // Helper closure: draw a label + value row
+    macro_rules! row {
+        ($label:expr, $value:expr, $color:expr) => {
+            unsafe { SelectObject(hdc, HGDIOBJ(font_label.0)); }
+            draw_text(hdc, label_x, y, $label, theme.label);
+            unsafe { SelectObject(hdc, HGDIOBJ(font_value.0)); }
+            draw_text(hdc, value_x, y, $value, $color);
+            y += row_height;
+        };
+    }
+
     // Uptime
-    draw_text(hdc, label_x, y, "Uptime", theme.label);
-    draw_text(
-        hdc,
-        value_x,
-        y,
-        &format!("{:02}h {:02}m {:02}s", hours, minutes, seconds),
-        theme.text,
-    );
-    y += row_height;
+    let uptime_str = format!("{:02}h {:02}m {:02}s", hours, minutes, seconds);
+    row!(s.uptime, &uptime_str, theme.text);
 
     // Typing
-    draw_text(hdc, label_x, y, "Typing", theme.label);
     let (typing_str, typing_color) = if config.typing {
-        ("ON", theme.green)
+        (s.on, theme.green)
     } else {
-        ("OFF", theme.red)
+        (s.off, theme.red)
     };
-    draw_text(hdc, value_x, y, typing_str, typing_color);
-    y += row_height;
+    row!(s.typing, typing_str, typing_color);
 
     // Mouse
-    draw_text(hdc, label_x, y, "Mouse", theme.label);
     let (mouse_str, mouse_color) = if config.mouse {
-        ("ON (silent)", theme.green)
+        (s.on_silent, theme.green)
     } else {
-        ("OFF", theme.red)
+        (s.off, theme.red)
     };
-    draw_text(hdc, value_x, y, mouse_str, mouse_color);
-    y += row_height;
+    row!(s.mouse, mouse_str, mouse_color);
 
     // Mouse mode
-    draw_text(hdc, label_x, y, "Mouse Mode", theme.label);
     let mode_str = match config.mouse_mode {
-        MouseMode::Subtle => "Subtle",
-        MouseMode::Wide => "Wide",
-        MouseMode::Mixed => "Mixed",
+        MouseMode::Subtle => s.subtle,
+        MouseMode::Wide => s.wide,
+        MouseMode::Mixed => s.mixed,
     };
-    draw_text(hdc, value_x, y, mode_str, theme.text);
-    y += row_height;
+    row!(s.mouse_mode, mode_str, theme.text);
 
     // Schedule
-    draw_text(hdc, label_x, y, "Schedule", theme.label);
     let sched_str = match config.schedule {
-        Schedule::Always => "Always".to_string(),
+        Schedule::Always => s.always.to_string(),
         Schedule::Business => format!("{}-{}", config.schedule_start, config.schedule_end),
     };
-    draw_text(hdc, value_x, y, &sched_str, theme.text);
-    y += row_height;
+    row!(s.schedule, &sched_str, theme.text);
 
     // Language
-    draw_text(hdc, label_x, y, "Language", theme.label);
     let lang_str = match config.language {
-        crate::config::Language::PtBr => "pt-br",
-        crate::config::Language::En => "en",
+        Language::PtBr => "pt-br",
+        Language::En => "en",
     };
-    draw_text(hdc, value_x, y, lang_str, theme.text);
-    y += row_height;
+    row!(s.language_label, lang_str, theme.text);
 
     // Hotkey
-    draw_text(hdc, label_x, y, "Hotkey", theme.label);
-    draw_text(hdc, value_x, y, &config.hotkey, theme.text);
-    y += row_height;
+    row!(s.hotkey, &config.hotkey, theme.text);
 
     // --- Separator ---
     y += scaled(4, scale);
@@ -638,47 +763,26 @@ fn handle_paint(hwnd: HWND) {
     y += scaled(12, scale);
 
     // Cycle
-    draw_text(hdc, label_x, y, "Cycle", theme.label);
-    draw_text(
-        hdc,
-        value_x,
-        y,
-        scheduler::cycle_label(cycle),
-        theme.text,
-    );
-    y += row_height;
+    let cycle_str = cycle_label_localized(cycle, s);
+    row!(s.cycle, cycle_str, theme.text);
 
     // Keystrokes
-    draw_text(hdc, label_x, y, "Keystrokes", theme.label);
-    draw_text(
-        hdc,
-        value_x,
-        y,
-        &format_count(input::keystroke_count()),
-        theme.text,
-    );
-    y += row_height;
+    let ks = format_count(input::keystroke_count());
+    row!(s.keystrokes, &ks, theme.text);
 
     // Mouse moves
-    draw_text(hdc, label_x, y, "Mouse Moves", theme.label);
-    draw_text(
-        hdc,
-        value_x,
-        y,
-        &format_count(input::mouse_move_count()),
-        theme.text,
-    );
-    y += row_height;
+    let mm = format_count(input::mouse_move_count());
+    row!(s.mouse_moves, &mm, theme.text);
 
     // User status
-    draw_text(hdc, label_x, y, "User", theme.label);
     let (user_str, user_color) = if user_paused {
-        ("Active (paused)", theme.yellow)
+        (s.active_paused, theme.yellow)
     } else {
-        ("Idle", theme.green)
+        (s.idle, theme.green)
     };
-    draw_text(hdc, value_x, y, user_str, user_color);
-    y += row_height + scaled(8, scale);
+    row!(s.user, user_str, user_color);
+
+    y += scaled(8, scale);
 
     // --- Footer ---
     fill_rect_color(hdc, pad, y, client.right - pad, y + 1, theme.separator);
@@ -691,14 +795,18 @@ fn handle_paint(hwnd: HWND) {
         hdc,
         pad,
         y,
-        &format!("{} to hide  |  Ctrl+Shift+Q to quit", config.hotkey),
+        &format!(
+            "{} {}  |  Ctrl+Shift+Q {}",
+            config.hotkey, s.footer_hide, s.footer_quit
+        ),
         theme.footer,
     );
 
     // Cleanup fonts
     unsafe {
         let _ = DeleteObject(HGDIOBJ(font_title.0));
-        let _ = DeleteObject(HGDIOBJ(font_normal.0));
+        let _ = DeleteObject(HGDIOBJ(font_label.0));
+        let _ = DeleteObject(HGDIOBJ(font_value.0));
         let _ = DeleteObject(HGDIOBJ(font_small.0));
         let _ = EndPaint(hwnd, &ps);
     }
@@ -833,5 +941,56 @@ mod tests {
     #[test]
     fn test_themes_have_different_backgrounds() {
         assert_ne!(LIGHT_THEME.bg, DARK_THEME.bg);
+    }
+
+    #[test]
+    fn test_gui_strings_en() {
+        let s = gui_strings(&Language::En);
+        assert_eq!(s.typing, "Typing");
+        assert_eq!(s.on, "ON");
+        assert_eq!(s.off, "OFF");
+        assert_eq!(s.cycle_active, "Active");
+    }
+
+    #[test]
+    fn test_gui_strings_pt_br() {
+        let s = gui_strings(&Language::PtBr);
+        assert_eq!(s.on, "SIM");
+        assert_eq!(s.off, "N\u{00c3}O");
+        assert_eq!(s.cycle_active, "Ativo");
+        assert_eq!(s.always, "Sempre");
+    }
+
+    #[test]
+    fn test_cycle_label_localized_pt() {
+        let s = gui_strings(&Language::PtBr);
+        assert_eq!(cycle_label_localized(scheduler::CYCLE_ACTIVE, s), "Ativo");
+        assert_eq!(cycle_label_localized(scheduler::CYCLE_LUNCH, s), "Almo\u{00e7}o");
+        assert_eq!(cycle_label_localized(scheduler::CYCLE_OUTSIDE_HOURS, s), "Fora do Hor\u{00e1}rio");
+    }
+
+    #[test]
+    fn test_cycle_label_localized_en() {
+        let s = gui_strings(&Language::En);
+        assert_eq!(cycle_label_localized(scheduler::CYCLE_ACTIVE, s), "Active");
+        assert_eq!(cycle_label_localized(scheduler::CYCLE_LUNCH, s), "Lunch");
+    }
+
+    #[test]
+    fn test_status_text_localized_paused_pt() {
+        let s = gui_strings(&Language::PtBr);
+        assert_eq!(
+            status_text_localized(scheduler::CYCLE_ACTIVE, true, s),
+            "Usu\u{00e1}rio Ativo \u{2014} Pausado"
+        );
+    }
+
+    #[test]
+    fn test_status_text_localized_active_en() {
+        let s = gui_strings(&Language::En);
+        assert_eq!(
+            status_text_localized(scheduler::CYCLE_ACTIVE, false, s),
+            "Active"
+        );
     }
 }
