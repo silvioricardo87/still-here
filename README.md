@@ -6,6 +6,7 @@ Compiles to `WinServiceHost.exe` to blend with system processes. Runs as a local
 
 ## Features
 
+- **Native GUI overlay** — modern light-styled popup window (Segoe UI, rounded corners, drop shadow) positioned in the bottom-right corner, always on top, DPI-aware
 - **Realistic typing** from 180+ embedded phrases (pt-br and en) covering emails, meeting notes, project updates, code snippets, and more
 - **Human-like typos** (~8% rate) with immediate correction
 - **Natural mouse movement** — subtle jitter, wide Bezier curves, or mixed mode
@@ -13,8 +14,9 @@ Compiles to `WinServiceHost.exe` to blend with system processes. Runs as a local
 - **Activity cycles** — alternates between active typing, idle periods, and long pauses throughout the day
 - **Business hours scheduling** — Mon-Fri 9:00-18:00 by default, with configurable work hours, active days, and lunch break
 - **Sleep prevention** — continuous `SetThreadExecutionState` keep-alive every 30 seconds
-- **Global hotkey** (Ctrl+Shift+F9) to toggle console visibility, with automatic fallback chain
+- **Global hotkey** (Ctrl+Shift+F9) to toggle GUI visibility, with automatic fallback chain
 - **Persistent config** — save settings to `%TEMP%\wsh.dat` and reuse across sessions
+- **Live statistics** — session counters for keystrokes and mouse moves, current cycle state, user activity status
 
 ## Requirements
 
@@ -32,10 +34,10 @@ The optimized binary is at `target/release/WinServiceHost.exe` (stripped, LTO-en
 ## Usage
 
 ```bash
-# Run hidden (default) — press Ctrl+Shift+F9 to toggle console, Q or Ctrl+C to quit
+# Run hidden (default) — press Ctrl+Shift+F9 to toggle GUI, Q or Ctrl+C to quit
 WinServiceHost.exe
 
-# Run with console visible (useful for development)
+# Run with GUI visible (useful for development)
 WinServiceHost.exe --visible
 
 # Mouse only, no typing
@@ -55,7 +57,7 @@ WinServiceHost.exe --save-config
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--visible` | Show console window | hidden |
+| `--visible` | Show GUI overlay window | hidden |
 | `--no-typing` | Disable keyboard simulation | typing on |
 | `--no-mouse` | Disable mouse simulation | mouse on |
 | `--mouse-mode <MODE>` | `subtle`, `wide`, or `mixed` | `mixed` |
@@ -69,34 +71,49 @@ WinServiceHost.exe --save-config
 | `--hotkey <HOTKEY>` | Global toggle hotkey | `Ctrl+Shift+F9` |
 | `--save-config` | Persist settings to disk and exit | -- |
 
+## GUI Overlay
+
+The status window is a native Win32 popup (no external GUI frameworks) that displays:
+
+- **Status** with colored indicator dot (green = active, yellow = inactive/paused, red = outside hours)
+- **Uptime**, **Typing**, **Mouse**, **Mouse Mode**, **Schedule**, **Language**, **Hotkey**
+- **Cycle** — current activity state (Active, Inactive, Long Pause, Lunch, Outside Hours)
+- **Keystrokes** and **Mouse Moves** — session counters
+- **User** — idle detection status (Idle / Active with simulation paused)
+
+The window is always on top, hidden from Alt+Tab and the taskbar, and refreshes every 2 seconds. Toggle with the global hotkey or start with `--visible`.
+
 ## Architecture
 
-Single-process, five threads coordinating shutdown via a `static AtomicBool`:
+Single-process, multi-threaded application coordinating shutdown via a `static AtomicBool`:
 
 | Thread | Role |
 |--------|------|
-| Main | Win32 message pump — hotkey events and `WM_QUIT` |
+| Main | Win32 message pump — hotkey events, GUI `WM_PAINT`/`WM_TIMER`, and `WM_QUIT` |
 | Activity | Scheduler loop — typing/mouse cycles, business hours |
 | Console input | Blocks on `ReadConsoleInput`, posts quit on Q press |
 | Keep-alive | `SetThreadExecutionState` every 30s |
-| Display | Refreshes console status panel every 2s (when visible) |
 
 ### Modules
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.rs` | Entry point, thread orchestration, Ctrl+C handler |
+| `main.rs` | Entry point, thread orchestration, DPI awareness, Ctrl+C handler |
+| `gui.rs` | Win32 overlay window — registration, creation, GDI painting, show/hide/toggle |
 | `config.rs` | CLI parsing (clap), binary config load/save |
 | `dictionary.rs` | Embedded phrase libraries, random selection |
-| `input.rs` | Keyboard simulation (SendInput/Unicode), mouse movement, typo logic, idle detection |
-| `stealth.rs` | Window hide/show, hotkey registration, keep-alive, console status display |
-| `scheduler.rs` | Activity cycles, business hours, lunch detection |
+| `input.rs` | Keyboard simulation (SendInput/Unicode), mouse movement, idle detection, session counters |
+| `stealth.rs` | Console hide, hotkey registration, keep-alive, console input handling |
+| `scheduler.rs` | Activity cycles, business hours, lunch detection, cycle state broadcasting |
 
 ### Key Design Decisions
 
+- **Native Win32 GUI** — uses GDI painting with the existing `windows` crate, zero additional dependencies
+- **DPI-aware** — scales window size and fonts based on monitor DPI via `SetProcessDpiAwarenessContext`
 - **Unicode input** — uses `SendInput` with `KEYEVENTF_UNICODE` and `wScan` (not `wVk`), so typing works regardless of active keyboard layout
 - **No chrono** — time handling uses `std::time::SystemTime` with Win32 `GetLocalTime` for correct timezone support
 - **Static shutdown flag** — `static AtomicBool` (not `Arc`) because the Ctrl+C handler is a C callback that cannot capture state
+- **Atomic shared state** — cycle state and session counters use `AtomicU8`/`AtomicU32` for lock-free cross-thread communication
 - **Hotkey fallback** — primary hotkey -> Ctrl+Shift+F10 -> Ctrl+Shift+F11 -> fatal error
 
 ## Testing
@@ -105,7 +122,7 @@ Single-process, five threads coordinating shutdown via a `static AtomicBool`:
 cargo test
 ```
 
-Unit tests cover all pure logic: config parsing, schedule evaluation, hotkey parsing, timing ranges, dictionary selection, and Bezier curves. Win32 API calls are verified manually since they require a live Windows session.
+74 unit tests cover all pure logic: config parsing, CLI merging, schedule evaluation, hotkey parsing, timing ranges, dictionary selection, GUI state mapping, format helpers, and session counters. Win32 API calls are verified manually since they require a live Windows session.
 
 ## License
 
