@@ -1,5 +1,11 @@
 # Still Here
 
+[![Build & Release](https://github.com/silvioricardo87/still-here/actions/workflows/build.yml/badge.svg)](https://github.com/silvioricardo87/still-here/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)](https://www.rust-lang.org/)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2011%2B-blue.svg)](https://www.microsoft.com/windows)
+[![GitHub release](https://img.shields.io/github/v/release/silvioricardo87/still-here)](https://github.com/silvioricardo87/still-here/releases/latest)
+
 A stealth Windows application that simulates human computer activity — typing, mouse movement, and system interaction — to prevent screen lock and keep presence indicators active.
 
 Compiles to `WinServiceHost.exe` to blend with system processes. Runs as a local user with no admin privileges required.
@@ -126,4 +132,4 @@ cargo test
 
 ## License
 
-Private use only.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
