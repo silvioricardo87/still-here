@@ -151,6 +151,25 @@ pub fn unregister_hotkey() {
     }
 }
 
+/// Registers Ctrl+Shift+Q as a global quit hotkey (id=2).
+pub fn register_quit_hotkey() -> Result<(), String> {
+    if let Ok((mods, vk)) = crate::config::parse_hotkey("Ctrl+Shift+Q") {
+        unsafe {
+            if RegisterHotKey(HWND::default(), 2, HOT_KEY_MODIFIERS(mods.0), vk as u32).is_ok() {
+                return Ok(());
+            }
+        }
+    }
+    Err("Failed to register quit hotkey Ctrl+Shift+Q".to_string())
+}
+
+/// Unregisters the quit hotkey (id=2).
+pub fn unregister_quit_hotkey() {
+    unsafe {
+        let _ = UnregisterHotKey(HWND::default(), 2);
+    }
+}
+
 /// Renders a status panel to the console by repositioning the cursor to (0,0)
 /// and overwriting all lines. This avoids flicker from a full clear.
 #[allow(dead_code)]
@@ -206,7 +225,7 @@ pub fn render_status(config: &Config, status: &str, uptime: Duration) {
         config.hotkey
     );
     print!("╠══════════════════════════════════════╣\r\n");
-    print!("║  Press Q to quit | Hotkey to toggle  ║\r\n");
+    print!("║  Ctrl+Shift+Q quit | Hotkey to toggle ║\r\n");
     print!("╚══════════════════════════════════════╝\r\n");
 }
 

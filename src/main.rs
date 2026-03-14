@@ -38,7 +38,15 @@ fn run_message_pump(shutdown: &'static AtomicBool) {
     unsafe {
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
             if msg.message == WM_HOTKEY {
-                gui::toggle_gui();
+                match msg.wParam.0 {
+                    1 => gui::toggle_gui(),
+                    2 => {
+                        // Ctrl+Shift+Q — quit
+                        shutdown.store(true, Ordering::SeqCst);
+                        break;
+                    }
+                    _ => {}
+                }
             }
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
@@ -86,6 +94,11 @@ fn main() {
         }
     }
 
+    // 4b. Register quit hotkey (Ctrl+Shift+Q)
+    if let Err(e) = stealth::register_quit_hotkey() {
+        eprintln!("Warning: {}", e);
+    }
+
     // 5. Always hide the console (GUI replaces it)
     stealth::hide_console();
 
@@ -121,5 +134,6 @@ fn main() {
     // 13. Cleanup
     gui::destroy_gui();
     stealth::unregister_hotkey();
+    stealth::unregister_quit_hotkey();
     stealth::restore_sleep();
 }

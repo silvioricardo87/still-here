@@ -5,8 +5,12 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateFontW, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, EndPaint,
-    FillRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn,
+    FillRect, FrameRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn,
     TextOutW, HFONT, HGDIOBJ, PAINTSTRUCT, TRANSPARENT,
+};
+use windows::Win32::System::Registry::{
+    RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
+    REG_VALUE_TYPE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, IsWindowVisible, KillTimer,
@@ -28,21 +32,61 @@ use crate::scheduler;
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 2000;
 
-// Colors (0x00BBGGRR format for Win32 COLORREF)
-const COLOR_BG: u32 = 0x00FFFFFF; // white
-const COLOR_TEXT: u32 = 0x00333333; // dark gray
-const COLOR_LABEL: u32 = 0x00888888; // medium gray
-const COLOR_GREEN: u32 = 0x005EC522; // #22c55e
-const COLOR_RED: u32 = 0x004444EF; // #ef4444
-const COLOR_YELLOW: u32 = 0x0000BFEA; // #eabf00
-const COLOR_SEPARATOR: u32 = 0x00EBE7E5; // #e5e7eb
-const COLOR_FOOTER: u32 = 0x00AAAAAA; // #aaaaaa
-// const COLOR_TAG_BG: u32 = 0x00F6F4F3; // #f3f4f6 — reserved for future tag styling
-
 // Window dimensions (base, before DPI scaling)
 const BASE_WIDTH: i32 = 280;
 const BASE_HEIGHT: i32 = 370;
 const MARGIN: i32 = 16;
+
+// ---------------------------------------------------------------------------
+// Theme (light / dark)
+// ---------------------------------------------------------------------------
+
+struct Theme {
+    bg: u32,
+    text: u32,
+    label: u32,
+    green: u32,
+    red: u32,
+    yellow: u32,
+    separator: u32,
+    footer: u32,
+    border: u32,
+}
+
+// Colors use 0x00BBGGRR format (Win32 COLORREF)
+const LIGHT_THEME: Theme = Theme {
+    bg: 0x00FFFFFF,         // white
+    text: 0x00333333,       // dark gray
+    label: 0x00888888,      // medium gray
+    green: 0x005EC522,      // #22c55e
+    red: 0x004444EF,        // #ef4444
+    yellow: 0x0000BFEA,     // #eabf00
+    separator: 0x00EBE7E5,  // #e5e7eb
+    footer: 0x00AAAAAA,     // #aaaaaa
+    border: 0x00CCCCCC,     // #cccccc
+};
+
+const DARK_THEME: Theme = Theme {
+    bg: 0x002B2B2B,         // #2b2b2b
+    text: 0x00E0E0E0,       // #e0e0e0
+    label: 0x00999999,      // #999999
+    green: 0x005EC522,      // #22c55e
+    red: 0x004444EF,        // #ef4444
+    yellow: 0x0000BFEA,     // #eabf00
+    separator: 0x00444444,  // #444444
+    footer: 0x00777777,     // #777777
+    border: 0x00555555,     // #555555
+};
+
+fn get_theme() -> &'static Theme {
+    unsafe {
+        if IS_DARK_MODE {
+            &DARK_THEME
+        } else {
+            &LIGHT_THEME
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Global state
@@ -52,6 +96,53 @@ static mut GUI_HWND: HWND = HWND(std::ptr::null_mut());
 static mut GUI_START_TIME: Option<Instant> = None;
 static mut GUI_CONFIG: Option<Config> = None;
 static GUI_VISIBLE: AtomicBool = AtomicBool::new(false);
+static mut IS_DARK_MODE: bool = false;
+
+// ---------------------------------------------------------------------------
+// Dark mode detection
+// ---------------------------------------------------------------------------
+
+/// Reads the Windows system theme from the registry.
+/// Returns true if the system is using dark mode.
+fn detect_dark_mode() -> bool {
+    unsafe {
+        let subkey: Vec<u16> =
+            "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+                .encode_utf16()
+                .collect();
+        let mut hkey = HKEY::default();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        )
+        .is_err()
+        {
+            return false;
+        }
+
+        let value_name: Vec<u16> = "AppsUseLightTheme\0".encode_utf16().collect();
+        let mut data: u32 = 1;
+        let mut data_size: u32 = std::mem::size_of::<u32>() as u32;
+        let mut reg_type = REG_VALUE_TYPE::default();
+        let result = RegQueryValueExW(
+            hkey,
+            PCWSTR(value_name.as_ptr()),
+            None,
+            Some(&mut reg_type),
+            Some(&mut data as *mut u32 as *mut u8),
+            Some(&mut data_size),
+        );
+        let _ = RegCloseKey(hkey);
+
+        if result.is_err() {
+            return false;
+        }
+        data == 0 // 0 = dark mode, 1 = light mode
+    }
+}
 
 // ---------------------------------------------------------------------------
 // DPI helpers
@@ -87,13 +178,21 @@ fn class_name() -> Vec<u16> {
 }
 
 pub fn register_window_class() {
+    // Detect dark mode before creating any window resources
+    unsafe {
+        IS_DARK_MODE = detect_dark_mode();
+    }
+
     let class = class_name();
+    let theme = get_theme();
     let wc = WNDCLASSEXW {
         cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
         style: CS_HREDRAW | CS_VREDRAW | CS_DROPSHADOW,
         lpfnWndProc: Some(gui_wndproc),
         hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },
-        hbrBackground: unsafe { CreateSolidBrush(windows::Win32::Foundation::COLORREF(COLOR_BG)) },
+        hbrBackground: unsafe {
+            CreateSolidBrush(windows::Win32::Foundation::COLORREF(theme.bg))
+        },
         lpszClassName: PCWSTR(class.as_ptr()),
         ..Default::default()
     };
@@ -330,16 +429,17 @@ fn draw_status_dot(
 
 /// Returns the dot color for the current state.
 pub fn status_dot_color(cycle: u8, user_paused: bool) -> u32 {
+    let theme = get_theme();
     if user_paused {
-        return COLOR_YELLOW;
+        return theme.yellow;
     }
     match cycle {
-        scheduler::CYCLE_ACTIVE => COLOR_GREEN,
+        scheduler::CYCLE_ACTIVE => theme.green,
         scheduler::CYCLE_INACTIVE | scheduler::CYCLE_LONG_PAUSE | scheduler::CYCLE_LUNCH => {
-            COLOR_YELLOW
+            theme.yellow
         }
-        scheduler::CYCLE_OUTSIDE_HOURS => COLOR_RED,
-        _ => COLOR_LABEL, // idle/unknown
+        scheduler::CYCLE_OUTSIDE_HOURS => theme.red,
+        _ => theme.label, // idle/unknown
     }
 }
 
@@ -375,6 +475,7 @@ fn handle_paint(hwnd: HWND) {
     let mut ps = PAINTSTRUCT::default();
     let hdc = unsafe { BeginPaint(hwnd, &mut ps) };
 
+    let theme = get_theme();
     let scale = get_dpi_scale();
     let pad = scaled(16, scale);
     let row_height = scaled(22, scale);
@@ -393,7 +494,22 @@ fn handle_paint(hwnd: HWND) {
     unsafe {
         let _ = GetClientRect(hwnd, &mut client);
     }
-    fill_rect_color(hdc, client.left, client.top, client.right, client.bottom, COLOR_BG);
+    fill_rect_color(
+        hdc,
+        client.left,
+        client.top,
+        client.right,
+        client.bottom,
+        theme.bg,
+    );
+
+    // Draw border
+    unsafe {
+        let border_brush =
+            CreateSolidBrush(windows::Win32::Foundation::COLORREF(theme.border));
+        FrameRect(hdc, &client, border_brush);
+        let _ = DeleteObject(border_brush);
+    }
 
     #[allow(static_mut_refs)]
     let config = unsafe { GUI_CONFIG.as_ref() };
@@ -423,7 +539,7 @@ fn handle_paint(hwnd: HWND) {
     unsafe {
         SelectObject(hdc, HGDIOBJ(font_title.0));
     }
-    draw_text(hdc, pad, y, "Still Here", COLOR_TEXT);
+    draw_text(hdc, pad, y, "Still Here", theme.text);
     y += scaled(24, scale);
 
     // --- Status line with dot ---
@@ -440,12 +556,12 @@ fn handle_paint(hwnd: HWND) {
         pad + dot_radius * 2 + scaled(8, scale),
         y,
         status,
-        COLOR_TEXT,
+        theme.text,
     );
     y += row_height + scaled(4, scale);
 
     // --- Separator ---
-    fill_rect_color(hdc, pad, y, client.right - pad, y + 1, COLOR_SEPARATOR);
+    fill_rect_color(hdc, pad, y, client.right - pad, y + 1, theme.separator);
     y += scaled(12, scale);
 
     // --- Info rows ---
@@ -453,119 +569,119 @@ fn handle_paint(hwnd: HWND) {
     let value_x = pad + scaled(100, scale);
 
     // Uptime
-    draw_text(hdc, label_x, y, "Uptime", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Uptime", theme.label);
     draw_text(
         hdc,
         value_x,
         y,
         &format!("{:02}h {:02}m {:02}s", hours, minutes, seconds),
-        COLOR_TEXT,
+        theme.text,
     );
     y += row_height;
 
     // Typing
-    draw_text(hdc, label_x, y, "Typing", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Typing", theme.label);
     let (typing_str, typing_color) = if config.typing {
-        ("ON", COLOR_GREEN)
+        ("ON", theme.green)
     } else {
-        ("OFF", COLOR_RED)
+        ("OFF", theme.red)
     };
     draw_text(hdc, value_x, y, typing_str, typing_color);
     y += row_height;
 
     // Mouse
-    draw_text(hdc, label_x, y, "Mouse", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Mouse", theme.label);
     let (mouse_str, mouse_color) = if config.mouse {
-        ("ON (silent)", COLOR_GREEN)
+        ("ON (silent)", theme.green)
     } else {
-        ("OFF", COLOR_RED)
+        ("OFF", theme.red)
     };
     draw_text(hdc, value_x, y, mouse_str, mouse_color);
     y += row_height;
 
     // Mouse mode
-    draw_text(hdc, label_x, y, "Mouse Mode", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Mouse Mode", theme.label);
     let mode_str = match config.mouse_mode {
         MouseMode::Subtle => "Subtle",
         MouseMode::Wide => "Wide",
         MouseMode::Mixed => "Mixed",
     };
-    draw_text(hdc, value_x, y, mode_str, COLOR_TEXT);
+    draw_text(hdc, value_x, y, mode_str, theme.text);
     y += row_height;
 
     // Schedule
-    draw_text(hdc, label_x, y, "Schedule", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Schedule", theme.label);
     let sched_str = match config.schedule {
         Schedule::Always => "Always".to_string(),
         Schedule::Business => format!("{}-{}", config.schedule_start, config.schedule_end),
     };
-    draw_text(hdc, value_x, y, &sched_str, COLOR_TEXT);
+    draw_text(hdc, value_x, y, &sched_str, theme.text);
     y += row_height;
 
     // Language
-    draw_text(hdc, label_x, y, "Language", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Language", theme.label);
     let lang_str = match config.language {
         crate::config::Language::PtBr => "pt-br",
         crate::config::Language::En => "en",
     };
-    draw_text(hdc, value_x, y, lang_str, COLOR_TEXT);
+    draw_text(hdc, value_x, y, lang_str, theme.text);
     y += row_height;
 
     // Hotkey
-    draw_text(hdc, label_x, y, "Hotkey", COLOR_LABEL);
-    draw_text(hdc, value_x, y, &config.hotkey, COLOR_TEXT);
+    draw_text(hdc, label_x, y, "Hotkey", theme.label);
+    draw_text(hdc, value_x, y, &config.hotkey, theme.text);
     y += row_height;
 
     // --- Separator ---
     y += scaled(4, scale);
-    fill_rect_color(hdc, pad, y, client.right - pad, y + 1, COLOR_SEPARATOR);
+    fill_rect_color(hdc, pad, y, client.right - pad, y + 1, theme.separator);
     y += scaled(12, scale);
 
     // Cycle
-    draw_text(hdc, label_x, y, "Cycle", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Cycle", theme.label);
     draw_text(
         hdc,
         value_x,
         y,
         scheduler::cycle_label(cycle),
-        COLOR_TEXT,
+        theme.text,
     );
     y += row_height;
 
     // Keystrokes
-    draw_text(hdc, label_x, y, "Keystrokes", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Keystrokes", theme.label);
     draw_text(
         hdc,
         value_x,
         y,
         &format_count(input::keystroke_count()),
-        COLOR_TEXT,
+        theme.text,
     );
     y += row_height;
 
     // Mouse moves
-    draw_text(hdc, label_x, y, "Mouse Moves", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "Mouse Moves", theme.label);
     draw_text(
         hdc,
         value_x,
         y,
         &format_count(input::mouse_move_count()),
-        COLOR_TEXT,
+        theme.text,
     );
     y += row_height;
 
     // User status
-    draw_text(hdc, label_x, y, "User", COLOR_LABEL);
+    draw_text(hdc, label_x, y, "User", theme.label);
     let (user_str, user_color) = if user_paused {
-        ("Active (paused)", COLOR_YELLOW)
+        ("Active (paused)", theme.yellow)
     } else {
-        ("Idle", COLOR_GREEN)
+        ("Idle", theme.green)
     };
     draw_text(hdc, value_x, y, user_str, user_color);
     y += row_height + scaled(8, scale);
 
     // --- Footer ---
-    fill_rect_color(hdc, pad, y, client.right - pad, y + 1, COLOR_SEPARATOR);
+    fill_rect_color(hdc, pad, y, client.right - pad, y + 1, theme.separator);
     y += scaled(8, scale);
 
     unsafe {
@@ -575,8 +691,8 @@ fn handle_paint(hwnd: HWND) {
         hdc,
         pad,
         y,
-        &format!("{} to hide  |  Q to quit", config.hotkey),
-        COLOR_FOOTER,
+        &format!("{} to hide  |  Ctrl+Shift+Q to quit", config.hotkey),
+        theme.footer,
     );
 
     // Cleanup fonts
@@ -631,34 +747,38 @@ mod tests {
 
     #[test]
     fn test_status_dot_color_active() {
+        let theme = get_theme();
         assert_eq!(
             status_dot_color(scheduler::CYCLE_ACTIVE, false),
-            COLOR_GREEN
+            theme.green
         );
     }
 
     #[test]
     fn test_status_dot_color_inactive() {
+        let theme = get_theme();
         assert_eq!(
             status_dot_color(scheduler::CYCLE_INACTIVE, false),
-            COLOR_YELLOW
+            theme.yellow
         );
     }
 
     #[test]
     fn test_status_dot_color_outside_hours() {
+        let theme = get_theme();
         assert_eq!(
             status_dot_color(scheduler::CYCLE_OUTSIDE_HOURS, false),
-            COLOR_RED
+            theme.red
         );
     }
 
     #[test]
     fn test_status_dot_color_user_paused_overrides() {
+        let theme = get_theme();
         // User paused should always be yellow regardless of cycle
         assert_eq!(
             status_dot_color(scheduler::CYCLE_ACTIVE, true),
-            COLOR_YELLOW
+            theme.yellow
         );
     }
 
@@ -688,5 +808,30 @@ mod tests {
         assert_eq!(format_count(1_247), "1,247");
         assert_eq!(format_count(12_345), "12,345");
         assert_eq!(format_count(1_234_567), "1,234,567");
+    }
+
+    #[test]
+    fn test_detect_dark_mode_returns_bool() {
+        // Just verify it doesn't panic — the result depends on system settings
+        let _ = detect_dark_mode();
+    }
+
+    #[test]
+    fn test_light_theme_has_distinct_colors() {
+        assert_ne!(LIGHT_THEME.bg, LIGHT_THEME.text);
+        assert_ne!(LIGHT_THEME.bg, LIGHT_THEME.border);
+        assert_ne!(LIGHT_THEME.label, LIGHT_THEME.text);
+    }
+
+    #[test]
+    fn test_dark_theme_has_distinct_colors() {
+        assert_ne!(DARK_THEME.bg, DARK_THEME.text);
+        assert_ne!(DARK_THEME.bg, DARK_THEME.border);
+        assert_ne!(DARK_THEME.label, DARK_THEME.text);
+    }
+
+    #[test]
+    fn test_themes_have_different_backgrounds() {
+        assert_ne!(LIGHT_THEME.bg, DARK_THEME.bg);
     }
 }
