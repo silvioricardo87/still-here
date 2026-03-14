@@ -479,4 +479,126 @@ mod tests {
     fn saturday_10_30() -> DateTime {
         DateTime { hour: 10, minute: 30, weekday: Weekday::Sat }
     }
+
+    #[test]
+    fn test_is_business_hours_at_start_boundary() {
+        let config = Config::default(); // 09:00-18:00
+        let at_start = DateTime { hour: 9, minute: 0, weekday: Weekday::Mon };
+        assert!(is_business_hours(&config, &at_start));
+    }
+
+    #[test]
+    fn test_is_business_hours_at_end_boundary() {
+        let config = Config::default(); // 09:00-18:00
+        let at_end = DateTime { hour: 18, minute: 0, weekday: Weekday::Mon };
+        assert!(!is_business_hours(&config, &at_end)); // end is exclusive
+    }
+
+    #[test]
+    fn test_is_business_hours_one_minute_before_end() {
+        let config = Config::default();
+        let before_end = DateTime { hour: 17, minute: 59, weekday: Weekday::Tue };
+        assert!(is_business_hours(&config, &before_end));
+    }
+
+    #[test]
+    fn test_is_business_hours_one_minute_before_start() {
+        let config = Config::default();
+        let before_start = DateTime { hour: 8, minute: 59, weekday: Weekday::Mon };
+        assert!(!is_business_hours(&config, &before_start));
+    }
+
+    #[test]
+    fn test_is_business_hours_custom_days_with_saturday() {
+        let mut config = Config::default();
+        config.schedule_days = vec![Weekday::Mon, Weekday::Sat];
+        let sat = DateTime { hour: 10, minute: 0, weekday: Weekday::Sat };
+        assert!(is_business_hours(&config, &sat));
+        let sun = DateTime { hour: 10, minute: 0, weekday: Weekday::Sun };
+        assert!(!is_business_hours(&config, &sun));
+    }
+
+    #[test]
+    fn test_is_business_hours_custom_times() {
+        let mut config = Config::default();
+        config.schedule_start = "06:00".to_string();
+        config.schedule_end = "14:00".to_string();
+        let early = DateTime { hour: 6, minute: 0, weekday: Weekday::Mon };
+        assert!(is_business_hours(&config, &early));
+        let after = DateTime { hour: 14, minute: 0, weekday: Weekday::Mon };
+        assert!(!is_business_hours(&config, &after));
+    }
+
+    #[test]
+    fn test_is_lunch_time_fuzzy_start_boundary() {
+        let config = Config::default(); // lunch 13:00, 60min
+        // 5 minutes before lunch start should be in fuzzy range
+        let just_before = DateTime { hour: 12, minute: 55, weekday: Weekday::Wed };
+        assert!(is_lunch_time(&config, &just_before));
+        // 6 minutes before should not
+        let too_early = DateTime { hour: 12, minute: 54, weekday: Weekday::Wed };
+        assert!(!is_lunch_time(&config, &too_early));
+    }
+
+    #[test]
+    fn test_is_lunch_time_fuzzy_end_boundary() {
+        let config = Config::default(); // lunch 13:00-14:00
+        // 5 minutes after lunch end should be in fuzzy range
+        let just_after = DateTime { hour: 14, minute: 4, weekday: Weekday::Wed };
+        assert!(is_lunch_time(&config, &just_after));
+        // 5 minutes after is exclusive
+        let too_late = DateTime { hour: 14, minute: 5, weekday: Weekday::Wed };
+        assert!(!is_lunch_time(&config, &too_late));
+    }
+
+    #[test]
+    fn test_is_lunch_time_custom_duration() {
+        let mut config = Config::default();
+        config.lunch_start = "12:00".to_string();
+        config.lunch_duration = 30; // 30 min lunch
+        let during = DateTime { hour: 12, minute: 15, weekday: Weekday::Mon };
+        assert!(is_lunch_time(&config, &during));
+        // 12:30 + 5min fuzzy = 12:35 is the exclusive end
+        let after = DateTime { hour: 12, minute: 40, weekday: Weekday::Mon };
+        assert!(!is_lunch_time(&config, &after));
+    }
+
+    #[test]
+    fn test_is_lunch_time_outside_lunch() {
+        let config = Config::default();
+        let morning = DateTime { hour: 10, minute: 0, weekday: Weekday::Wed };
+        assert!(!is_lunch_time(&config, &morning));
+        let evening = DateTime { hour: 17, minute: 0, weekday: Weekday::Wed };
+        assert!(!is_lunch_time(&config, &evening));
+    }
+
+    #[test]
+    fn test_pick_next_cycle_exhausted_quota_no_long_pause() {
+        let plan = DailyPlan { long_pause_count: 2, long_pauses_used: 2 };
+        // With quota exhausted, should never get LongPause
+        for _ in 0..200 {
+            let cycle = pick_next_cycle(&plan);
+            match cycle {
+                ActivityCycle::LongPause(_) => panic!("Should not get LongPause when quota exhausted"),
+                ActivityCycle::Active(d) => assert!(d >= 480 && d <= 1500),
+                ActivityCycle::Inactive(d) => assert!(d >= 300 && d <= 1200),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_time_edge_cases() {
+        assert_eq!(parse_time("23:59"), (23, 59));
+        assert_eq!(parse_time("0:0"), (0, 0));
+        // Invalid input falls back to 0
+        assert_eq!(parse_time("invalid"), (0, 0));
+        assert_eq!(parse_time(""), (0, 0));
+    }
+
+    #[test]
+    fn test_daily_plan_initial_state() {
+        let plan = generate_daily_plan();
+        assert_eq!(plan.long_pauses_used, 0);
+        assert!(plan.long_pause_count >= 1 && plan.long_pause_count <= 3);
+    }
 }
