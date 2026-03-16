@@ -149,7 +149,9 @@ pub fn simulate_typing_activity(phrase: &str, shutdown: &AtomicBool) {
 
         // If the user starts typing/moving, pause until they're idle again
         if user_is_active() {
+            crate::scheduler::set_user_paused(true);
             wait_for_user_idle(shutdown);
+            crate::scheduler::set_user_paused(false);
             if shutdown.load(Ordering::Relaxed) {
                 return;
             }

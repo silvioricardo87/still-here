@@ -213,9 +213,16 @@ fn sleep_interruptible(seconds: u64, shutdown: &AtomicBool) -> bool {
 /// requested during the wait.
 fn pause_if_user_active(shutdown: &AtomicBool) -> bool {
     if crate::input::user_is_active() {
+        USER_IS_PAUSED.store(true, Ordering::Relaxed);
         crate::input::wait_for_user_idle(shutdown);
+        USER_IS_PAUSED.store(false, Ordering::Relaxed);
     }
     shutdown.load(Ordering::Relaxed)
+}
+
+/// Sets the user-paused flag (called from input module during typing simulation).
+pub fn set_user_paused(paused: bool) {
+    USER_IS_PAUSED.store(paused, Ordering::Relaxed);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,11 +265,9 @@ pub fn run_scheduler(config: Config, shutdown: &'static AtomicBool) {
         }
 
         // --- Pause while user is active ---
-        USER_IS_PAUSED.store(crate::input::user_is_active(), Ordering::Relaxed);
         if pause_if_user_active(shutdown) {
             break;
         }
-        USER_IS_PAUSED.store(false, Ordering::Relaxed);
 
         // --- Outside business hours (Business schedule only) ---
         if config.schedule == Schedule::Business && !is_business_hours(&config, &now) {
