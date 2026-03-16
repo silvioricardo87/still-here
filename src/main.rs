@@ -10,12 +10,13 @@ use std::time::Instant;
 
 use clap::Parser;
 use config::{CliArgs, Config};
-use windows::Win32::Foundation::{BOOL, LPARAM, TRUE, WPARAM};
+use windows::Win32::Foundation::{BOOL, HANDLE, LPARAM, TRUE, WPARAM};
 use windows::Win32::System::Console::SetConsoleCtrlHandler;
-use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetMessageW, PostThreadMessageW, TranslateMessage, MSG, WM_HOTKEY, WM_QUIT,
 };
+use windows::core::w;
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 static MAIN_THREAD_ID: AtomicU32 = AtomicU32::new(0);
@@ -55,7 +56,26 @@ fn run_message_pump(shutdown: &'static AtomicBool) {
     }
 }
 
+/// Attempts to acquire a system-wide named mutex. Returns the handle if this
+/// is the first instance, or `None` if another instance already holds it.
+fn acquire_single_instance_lock() -> Option<HANDLE> {
+    unsafe {
+        let handle = CreateMutexW(None, true, w!("Global\\WinServiceHost_SingleInstance")).ok()?;
+        // ERROR_ALREADY_EXISTS (183) means another instance owns the mutex
+        if windows::Win32::Foundation::GetLastError().0 == 183 {
+            return None;
+        }
+        Some(handle)
+    }
+}
+
 fn main() {
+    // 0. Single-instance guard
+    let _mutex = match acquire_single_instance_lock() {
+        Some(handle) => handle,
+        None => return, // Another instance is already running
+    };
+
     // 1. Enable DPI awareness
     unsafe {
         use windows::Win32::UI::HiDpi::{
@@ -136,4 +156,23 @@ fn main() {
     stealth::unregister_hotkey();
     stealth::unregister_quit_hotkey();
     stealth::restore_sleep();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_single_instance_lock_succeeds_first_time() {
+        // First acquisition should succeed
+        let handle = acquire_single_instance_lock();
+        assert!(handle.is_some(), "First lock acquisition should succeed");
+
+        // Second acquisition with the same mutex name should fail
+        let handle2 = acquire_single_instance_lock();
+        assert!(handle2.is_none(), "Second lock acquisition should fail");
+
+        // Keep handle alive until assertions complete
+        let _ = handle;
+    }
 }
