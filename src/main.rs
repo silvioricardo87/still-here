@@ -1,3 +1,8 @@
+// Hide the console window entirely — no taskbar icon, no flash on startup.
+// In release builds we use the Windows subsystem (no console allocated).
+// In debug builds we keep the console for development convenience.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod config;
 mod dictionary;
 mod gui;

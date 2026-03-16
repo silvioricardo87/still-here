@@ -142,6 +142,12 @@ fn gui_strings(lang: &Language) -> &'static GuiStrings {
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 2000;
 
+/// Extended window style: TOOLWINDOW hides from taskbar/Alt+Tab, TOPMOST keeps on top.
+const GUI_EX_STYLE: windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE =
+    windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(
+        WS_EX_TOPMOST.0 | WS_EX_TOOLWINDOW.0,
+    );
+
 // Window dimensions (base, before DPI scaling)
 const BASE_WIDTH: i32 = 280;
 const BASE_HEIGHT: i32 = 370;
@@ -326,7 +332,7 @@ pub fn create_gui_window(config: &Config, start_time: Instant) {
 
     unsafe {
         let hwnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            GUI_EX_STYLE,
             PCWSTR(class.as_ptr()),
             PCWSTR(title.as_ptr()),
             WS_POPUP,
@@ -983,6 +989,23 @@ mod tests {
         assert_eq!(
             status_text_localized(scheduler::CYCLE_ACTIVE, true, s),
             "Usu\u{00e1}rio Ativo \u{2014} Pausado"
+        );
+    }
+
+    #[test]
+    fn test_gui_window_hidden_from_taskbar() {
+        // WS_EX_TOOLWINDOW must be set to hide from taskbar and Alt+Tab
+        assert_ne!(
+            GUI_EX_STYLE.0 & WS_EX_TOOLWINDOW.0,
+            0,
+            "GUI window must have WS_EX_TOOLWINDOW to stay off the taskbar"
+        );
+        // WS_EX_APPWINDOW must NOT be set (it forces taskbar appearance)
+        const WS_EX_APPWINDOW: u32 = 0x00040000;
+        assert_eq!(
+            GUI_EX_STYLE.0 & WS_EX_APPWINDOW,
+            0,
+            "GUI window must NOT have WS_EX_APPWINDOW"
         );
     }
 
