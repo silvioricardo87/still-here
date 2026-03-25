@@ -89,6 +89,8 @@ pub struct Config {
     pub language: Language,
     pub hotkey: String,
     pub schedule_days: Vec<Weekday>,
+    pub auto_shutdown: bool,
+    pub auto_shutdown_delay: u32,
 }
 
 impl Default for Config {
@@ -112,6 +114,8 @@ impl Default for Config {
                 Weekday::Thu,
                 Weekday::Fri,
             ],
+            auto_shutdown: false,
+            auto_shutdown_delay: 0,
         }
     }
 }
@@ -192,6 +196,12 @@ impl Config {
         if let Some(ref hk) = args.hotkey {
             self.hotkey = hk.clone();
         }
+        if args.auto_shutdown {
+            self.auto_shutdown = true;
+        }
+        if let Some(delay) = args.auto_shutdown_delay {
+            self.auto_shutdown_delay = delay;
+        }
     }
 }
 
@@ -253,6 +263,14 @@ pub struct CliArgs {
     /// Save the resulting config to %TEMP%\wsh.dat and exit
     #[arg(long = "save-config")]
     pub save_config: bool,
+
+    /// Enable auto-shutdown after business hours when idle
+    #[arg(long = "auto-shutdown")]
+    pub auto_shutdown: bool,
+
+    /// Idle minutes before auto-shutdown (0 = random 5-15 min)
+    #[arg(long = "auto-shutdown-delay", value_name = "MINUTES")]
+    pub auto_shutdown_delay: Option<u32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -601,6 +619,30 @@ mod tests {
         assert_eq!(config.mouse_mode, original.mouse_mode);
         assert_eq!(config.schedule, original.schedule);
         assert_eq!(config.language, original.language);
+    }
+
+    #[test]
+    fn test_default_auto_shutdown_disabled() {
+        let config = Config::default();
+        assert!(!config.auto_shutdown);
+        assert_eq!(config.auto_shutdown_delay, 0);
+    }
+
+    #[test]
+    fn test_merge_cli_auto_shutdown() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--auto-shutdown"]);
+        config.merge_cli(&args);
+        assert!(config.auto_shutdown);
+    }
+
+    #[test]
+    fn test_merge_cli_auto_shutdown_delay() {
+        let mut config = Config::default();
+        let args = CliArgs::parse_from(["test", "--auto-shutdown", "--auto-shutdown-delay", "10"]);
+        config.merge_cli(&args);
+        assert!(config.auto_shutdown);
+        assert_eq!(config.auto_shutdown_delay, 10);
     }
 
     #[test]
