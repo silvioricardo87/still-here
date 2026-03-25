@@ -39,7 +39,7 @@ fn mark_simulated() {
 }
 
 /// Returns the system idle time in milliseconds (time since last input event).
-fn system_idle_ms() -> u32 {
+pub fn system_idle_ms() -> u32 {
     let mut lii = LASTINPUTINFO {
         cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
         dwTime: 0,

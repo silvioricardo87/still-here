@@ -18,6 +18,7 @@ pub const CYCLE_OUTSIDE_HOURS: u8 = 5;
 
 static CURRENT_CYCLE: AtomicU8 = AtomicU8::new(CYCLE_IDLE);
 static USER_IS_PAUSED: AtomicBool = AtomicBool::new(false);
+static AUTO_SHUTDOWN_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Returns the current cycle as a u8 constant.
 pub fn current_cycle() -> u8 {
@@ -225,6 +226,33 @@ pub fn set_user_paused(paused: bool) {
     USER_IS_PAUSED.store(paused, Ordering::Relaxed);
 }
 
+/// Returns true if auto-shutdown is enabled.
+pub fn auto_shutdown_enabled() -> bool {
+    AUTO_SHUTDOWN_ENABLED.load(Ordering::Relaxed)
+}
+
+/// Sets the auto-shutdown enabled flag (called from main hotkey handler and init).
+pub fn set_auto_shutdown_enabled(enabled: bool) {
+    AUTO_SHUTDOWN_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+/// Returns the shutdown delay in minutes. If `configured_delay` is 0, returns
+/// a random value between 5 and 15 (inclusive). Otherwise returns the configured value.
+pub fn resolve_shutdown_delay(configured_delay: u32) -> u32 {
+    if configured_delay == 0 {
+        rand::thread_rng().gen_range(5u32..=15u32)
+    } else {
+        configured_delay
+    }
+}
+
+/// Initiates a system shutdown via shutdown.exe.
+fn execute_shutdown() {
+    let _ = std::process::Command::new("shutdown")
+        .args(["/s", "/t", "0", "/f"])
+        .spawn();
+}
+
 // ---------------------------------------------------------------------------
 // Main scheduler loop
 // ---------------------------------------------------------------------------
@@ -272,6 +300,18 @@ pub fn run_scheduler(config: Config, shutdown: &'static AtomicBool) {
         // --- Outside business hours (Business schedule only) ---
         if config.schedule == Schedule::Business && !is_business_hours(&config, &now) {
             CURRENT_CYCLE.store(CYCLE_OUTSIDE_HOURS, Ordering::Relaxed);
+
+            // Auto-shutdown: if user has been idle long enough, shut down
+            if auto_shutdown_enabled() {
+                let delay_min = resolve_shutdown_delay(config.auto_shutdown_delay);
+                let delay_ms = delay_min as u32 * 60_000;
+                if crate::input::system_idle_ms() >= delay_ms {
+                    execute_shutdown();
+                    shutdown.store(true, Ordering::SeqCst);
+                    break;
+                }
+            }
+
             // Silent mouse jitter every 3–5 minutes, no typing
             if config.mouse {
                 crate::input::move_mouse_silent();
@@ -674,5 +714,33 @@ mod tests {
     fn test_user_is_paused_default() {
         // We can't control the static in tests, but it should return a bool
         let _paused = user_is_paused();
+    }
+
+    #[test]
+    fn test_auto_shutdown_enabled_default() {
+        let _ = auto_shutdown_enabled();
+    }
+
+    #[test]
+    fn test_auto_shutdown_toggle() {
+        set_auto_shutdown_enabled(true);
+        assert!(auto_shutdown_enabled());
+        set_auto_shutdown_enabled(false);
+        assert!(!auto_shutdown_enabled());
+    }
+
+    #[test]
+    fn test_resolve_shutdown_delay_random() {
+        for _ in 0..50 {
+            let delay = resolve_shutdown_delay(0);
+            assert!(delay >= 5 && delay <= 15, "random delay {} not in 5..=15", delay);
+        }
+    }
+
+    #[test]
+    fn test_resolve_shutdown_delay_fixed() {
+        assert_eq!(resolve_shutdown_delay(10), 10);
+        assert_eq!(resolve_shutdown_delay(1), 1);
+        assert_eq!(resolve_shutdown_delay(30), 30);
     }
 }

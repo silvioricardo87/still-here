@@ -51,6 +51,11 @@ fn run_message_pump(shutdown: &'static AtomicBool) {
                         shutdown.store(true, Ordering::SeqCst);
                         break;
                     }
+                    3 => {
+                        // Ctrl+Shift+F12 — toggle auto-shutdown
+                        let current = scheduler::auto_shutdown_enabled();
+                        scheduler::set_auto_shutdown_enabled(!current);
+                    }
                     _ => {}
                 }
             }
@@ -94,6 +99,9 @@ fn main() {
     let mut config = Config::load();
     config.merge_cli(&args);
 
+    // Initialize auto-shutdown state from config
+    scheduler::set_auto_shutdown_enabled(config.auto_shutdown);
+
     if args.save_config {
         match config.save() {
             Ok(_) => println!("Config saved to %TEMP%\\wsh.dat"),
@@ -121,6 +129,11 @@ fn main() {
 
     // 4b. Register quit hotkey (Ctrl+Shift+Q)
     if let Err(e) = stealth::register_quit_hotkey() {
+        eprintln!("Warning: {}", e);
+    }
+
+    // 4c. Register auto-shutdown toggle hotkey (Ctrl+Shift+F12)
+    if let Err(e) = stealth::register_auto_shutdown_hotkey() {
         eprintln!("Warning: {}", e);
     }
 
@@ -160,6 +173,7 @@ fn main() {
     gui::destroy_gui();
     stealth::unregister_hotkey();
     stealth::unregister_quit_hotkey();
+    stealth::unregister_auto_shutdown_hotkey();
     stealth::restore_sleep();
 }
 

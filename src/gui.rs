@@ -60,6 +60,7 @@ struct GuiStrings {
     cycle_long_pause: &'static str,
     cycle_lunch: &'static str,
     cycle_outside: &'static str,
+    auto_shutdown: &'static str,
 }
 
 const STRINGS_EN: GuiStrings = GuiStrings {
@@ -93,6 +94,7 @@ const STRINGS_EN: GuiStrings = GuiStrings {
     cycle_long_pause: "Long Pause",
     cycle_lunch: "Lunch",
     cycle_outside: "Outside Hours",
+    auto_shutdown: "Auto-Shutdown",
 };
 
 const STRINGS_PT: GuiStrings = GuiStrings {
@@ -126,6 +128,7 @@ const STRINGS_PT: GuiStrings = GuiStrings {
     cycle_long_pause: "Pausa Longa",
     cycle_lunch: "Almo\u{00e7}o",
     cycle_outside: "Fora do Hor\u{00e1}rio",
+    auto_shutdown: "Auto Desligar",
 };
 
 fn gui_strings(lang: &Language) -> &'static GuiStrings {
@@ -150,7 +153,7 @@ const GUI_EX_STYLE: windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE =
 
 // Window dimensions (base, before DPI scaling)
 const BASE_WIDTH: i32 = 280;
-const BASE_HEIGHT: i32 = 370;
+const BASE_HEIGHT: i32 = 392;
 const MARGIN: i32 = 16;
 
 // ---------------------------------------------------------------------------
@@ -789,6 +792,14 @@ fn handle_paint(hwnd: HWND) {
     };
     row!(s.user, user_str, user_color);
 
+    // Auto-shutdown status
+    let (shutdown_str, shutdown_color) = if scheduler::auto_shutdown_enabled() {
+        (s.on, theme.green)
+    } else {
+        (s.off, theme.label)
+    };
+    row!(s.auto_shutdown, shutdown_str, shutdown_color);
+
     y += scaled(8, scale);
 
     // --- Footer ---
@@ -990,6 +1001,18 @@ mod tests {
             status_text_localized(scheduler::CYCLE_ACTIVE, true, s),
             "Usu\u{00e1}rio Ativo \u{2014} Pausado"
         );
+    }
+
+    #[test]
+    fn test_gui_strings_auto_shutdown_en() {
+        let s = gui_strings(&Language::En);
+        assert_eq!(s.auto_shutdown, "Auto-Shutdown");
+    }
+
+    #[test]
+    fn test_gui_strings_auto_shutdown_pt() {
+        let s = gui_strings(&Language::PtBr);
+        assert_eq!(s.auto_shutdown, "Auto Desligar");
     }
 
     #[test]
