@@ -104,7 +104,7 @@ fn main() {
 
     if args.save_config {
         match config.save() {
-            Ok(_) => println!("Config saved to %TEMP%\\still-here.dat"),
+            Ok(_) => println!("Config saved to %TEMP%\\sth.dat"),
             Err(e) => eprintln!("Failed to save config: {}", e),
         }
         return;

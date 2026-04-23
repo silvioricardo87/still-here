@@ -21,7 +21,7 @@ Ships as `still-here.exe` — rename the binary (e.g. to `WinServiceHost.exe`, `
 - **Business hours scheduling** — Mon-Fri 9:00-18:00 by default, with configurable work hours, active days, and lunch break
 - **Sleep prevention** — continuous `SetThreadExecutionState` keep-alive every 30 seconds
 - **Global hotkey** (Ctrl+Shift+F9) to toggle GUI visibility, with automatic fallback chain
-- **Persistent config** — save settings to `%TEMP%\still-here.dat` and reuse across sessions
+- **Persistent config** — save settings to `%TEMP%\sth.dat` and reuse across sessions
 - **Live statistics** — session counters for keystrokes and mouse moves, current cycle state, user activity status
 
 ## Requirements
@@ -79,7 +79,7 @@ still-here.exe --save-config
 
 ## GUI Overlay
 
-The status window is a native Win32 popup (no external GUI frameworks) that displays:
+The status window is a native Win32 popup (no external GUI frameworks). The header shows the title and current app version; the body displays:
 
 - **Status** with colored indicator dot (green = active, yellow = inactive/paused, red = outside hours)
 - **Uptime**, **Typing**, **Mouse**, **Mouse Mode**, **Schedule**, **Language**, **Hotkey**
@@ -128,7 +128,7 @@ Single-process, multi-threaded application coordinating shutdown via a `static A
 cargo test
 ```
 
-74 unit tests cover all pure logic: config parsing, CLI merging, schedule evaluation, hotkey parsing, timing ranges, dictionary selection, GUI state mapping, format helpers, and session counters. Win32 API calls are verified manually since they require a live Windows session.
+97 unit tests cover all pure logic: config parsing, CLI merging, schedule evaluation, hotkey parsing, timing ranges, dictionary selection, GUI state mapping, format helpers, and session counters. Win32 API calls are verified manually since they require a live Windows session.
 
 ## License
 

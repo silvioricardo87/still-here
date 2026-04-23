@@ -122,7 +122,7 @@ impl Default for Config {
 
 fn config_path() -> PathBuf {
     let temp = env::var("TEMP").unwrap_or_else(|_| env::temp_dir().to_string_lossy().into_owned());
-    PathBuf::from(temp).join("still-here.dat")
+    PathBuf::from(temp).join("sth.dat")
 }
 
 impl Config {
@@ -260,7 +260,7 @@ pub struct CliArgs {
     #[arg(long = "hotkey", value_name = "HOTKEY")]
     pub hotkey: Option<String>,
 
-    /// Save the resulting config to %TEMP%\still-here.dat and exit
+    /// Save the resulting config to %TEMP%\sth.dat and exit
     #[arg(long = "save-config")]
     pub save_config: bool,
 
