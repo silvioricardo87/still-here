@@ -24,6 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::config::{Config, Language, MouseMode, Schedule};
 use crate::input;
 use crate::scheduler;
+use crate::stealth;
 
 // ---------------------------------------------------------------------------
 // Localization
@@ -38,6 +39,7 @@ struct GuiStrings {
     schedule: &'static str,
     language_label: &'static str,
     hotkey: &'static str,
+    shutdown_hotkey: &'static str,
     cycle: &'static str,
     keystrokes: &'static str,
     mouse_moves: &'static str,
@@ -72,6 +74,7 @@ const STRINGS_EN: GuiStrings = GuiStrings {
     schedule: "Schedule",
     language_label: "Language",
     hotkey: "Hotkey",
+    shutdown_hotkey: "Shutdown Key",
     cycle: "Cycle",
     keystrokes: "Keystrokes",
     mouse_moves: "Mouse Moves",
@@ -106,6 +109,7 @@ const STRINGS_PT: GuiStrings = GuiStrings {
     schedule: "Hor\u{00e1}rio",
     language_label: "Idioma",
     hotkey: "Atalho",
+    shutdown_hotkey: "Atalho Deslig.",
     cycle: "Ciclo",
     keystrokes: "Teclas",
     mouse_moves: "Mov. Mouse",
@@ -156,7 +160,7 @@ const GUI_EX_STYLE: windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE =
 
 // Window dimensions (base, before DPI scaling)
 const BASE_WIDTH: i32 = 280;
-const BASE_HEIGHT: i32 = 392;
+const BASE_HEIGHT: i32 = 414;
 const MARGIN: i32 = 16;
 
 // ---------------------------------------------------------------------------
@@ -782,8 +786,11 @@ fn handle_paint(hwnd: HWND) {
     };
     row!(s.language_label, lang_str, theme.text);
 
-    // Hotkey
+    // Hotkey (GUI toggle)
     row!(s.hotkey, &config.hotkey, theme.text);
+
+    // Auto-shutdown hotkey (fixed)
+    row!(s.shutdown_hotkey, stealth::AUTO_SHUTDOWN_HOTKEY, theme.text);
 
     // --- Separator ---
     y += scaled(4, scale);
@@ -1063,6 +1070,29 @@ mod tests {
     fn test_app_version_matches_cargo_pkg_version() {
         // Constant must be exactly the Cargo.toml version, not a hardcoded string.
         assert_eq!(APP_VERSION, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn test_gui_strings_shutdown_hotkey_en() {
+        let s = gui_strings(&Language::En);
+        assert_eq!(s.shutdown_hotkey, "Shutdown Key");
+    }
+
+    #[test]
+    fn test_gui_strings_shutdown_hotkey_pt() {
+        let s = gui_strings(&Language::PtBr);
+        assert_eq!(s.shutdown_hotkey, "Atalho Deslig.");
+    }
+
+    #[test]
+    fn test_auto_shutdown_hotkey_constant_is_valid() {
+        // The constant must parse as a valid hotkey so registration can't drift from
+        // what the GUI displays.
+        assert!(
+            crate::config::parse_hotkey(stealth::AUTO_SHUTDOWN_HOTKEY).is_ok(),
+            "AUTO_SHUTDOWN_HOTKEY must be parseable: {}",
+            stealth::AUTO_SHUTDOWN_HOTKEY
+        );
     }
 
     #[test]

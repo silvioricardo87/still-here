@@ -128,7 +128,7 @@ Single-process, multi-threaded application coordinating shutdown via a `static A
 cargo test
 ```
 
-97 unit tests cover all pure logic: config parsing, CLI merging, schedule evaluation, hotkey parsing, timing ranges, dictionary selection, GUI state mapping, format helpers, and session counters. Win32 API calls are verified manually since they require a live Windows session.
+100 unit tests cover all pure logic: config parsing, CLI merging, schedule evaluation, hotkey parsing, timing ranges, dictionary selection, GUI state mapping, format helpers, and session counters. Win32 API calls are verified manually since they require a live Windows session.
 
 ## License
 

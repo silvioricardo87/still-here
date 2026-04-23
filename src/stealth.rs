@@ -170,16 +170,22 @@ pub fn unregister_quit_hotkey() {
     }
 }
 
-/// Registers Ctrl+Shift+F12 as a global auto-shutdown toggle hotkey (id=3).
+/// Fixed global hotkey that toggles auto-shutdown at runtime.
+pub const AUTO_SHUTDOWN_HOTKEY: &str = "Ctrl+Shift+F12";
+
+/// Registers the auto-shutdown toggle hotkey (id=3).
 pub fn register_auto_shutdown_hotkey() -> Result<(), String> {
-    if let Ok((mods, vk)) = crate::config::parse_hotkey("Ctrl+Shift+F12") {
+    if let Ok((mods, vk)) = crate::config::parse_hotkey(AUTO_SHUTDOWN_HOTKEY) {
         unsafe {
             if RegisterHotKey(HWND::default(), 3, HOT_KEY_MODIFIERS(mods.0), vk as u32).is_ok() {
                 return Ok(());
             }
         }
     }
-    Err("Failed to register auto-shutdown hotkey Ctrl+Shift+F12".to_string())
+    Err(format!(
+        "Failed to register auto-shutdown hotkey {}",
+        AUTO_SHUTDOWN_HOTKEY
+    ))
 }
 
 /// Unregisters the auto-shutdown hotkey (id=3).
