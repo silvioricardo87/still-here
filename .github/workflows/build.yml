@@ -103,6 +103,12 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Package release archive
+        if: steps.tag_check.outputs.exists == 'false'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path target/release/still-here.exe -DestinationPath "StillHere-${{ steps.version.outputs.tag }}.zip"
+
       - name: Create release
         if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
@@ -113,4 +119,4 @@ jobs:
             ## Changes
 
             ${{ steps.changelog.outputs.changes }}
-          files: target/release/WinServiceHost.exe
+          files: StillHere-${{ steps.version.outputs.tag }}.zip

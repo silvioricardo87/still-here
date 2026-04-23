@@ -122,7 +122,7 @@ impl Default for Config {
 
 fn config_path() -> PathBuf {
     let temp = env::var("TEMP").unwrap_or_else(|_| env::temp_dir().to_string_lossy().into_owned());
-    PathBuf::from(temp).join("wsh.dat")
+    PathBuf::from(temp).join("still-here.dat")
 }
 
 impl Config {
@@ -210,7 +210,7 @@ impl Config {
 // ---------------------------------------------------------------------------
 
 #[derive(Parser, Debug)]
-#[command(name = "WinServiceHost", about = "Still Here — stealth activity simulator")]
+#[command(name = "still-here", about = "Still Here — stealth activity simulator")]
 pub struct CliArgs {
     /// Show the console window (default: hidden)
     #[arg(long)]
@@ -260,7 +260,7 @@ pub struct CliArgs {
     #[arg(long = "hotkey", value_name = "HOTKEY")]
     pub hotkey: Option<String>,
 
-    /// Save the resulting config to %TEMP%\wsh.dat and exit
+    /// Save the resulting config to %TEMP%\still-here.dat and exit
     #[arg(long = "save-config")]
     pub save_config: bool,
 

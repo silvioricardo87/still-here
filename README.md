@@ -8,7 +8,7 @@
 
 A stealth Windows application that simulates human computer activity — typing, mouse movement, and system interaction — to prevent screen lock and keep presence indicators active.
 
-Compiles to `WinServiceHost.exe` to blend with system processes. Runs as a local user with no admin privileges required.
+Ships as `still-here.exe` — rename the binary (e.g. to `WinServiceHost.exe`, `Notepad.exe`, etc.) if you want it to blend in with system processes. Runs as a local user with no admin privileges required.
 
 ## Features
 
@@ -21,7 +21,7 @@ Compiles to `WinServiceHost.exe` to blend with system processes. Runs as a local
 - **Business hours scheduling** — Mon-Fri 9:00-18:00 by default, with configurable work hours, active days, and lunch break
 - **Sleep prevention** — continuous `SetThreadExecutionState` keep-alive every 30 seconds
 - **Global hotkey** (Ctrl+Shift+F9) to toggle GUI visibility, with automatic fallback chain
-- **Persistent config** — save settings to `%TEMP%\wsh.dat` and reuse across sessions
+- **Persistent config** — save settings to `%TEMP%\still-here.dat` and reuse across sessions
 - **Live statistics** — session counters for keystrokes and mouse moves, current cycle state, user activity status
 
 ## Requirements
@@ -35,28 +35,28 @@ Compiles to `WinServiceHost.exe` to blend with system processes. Runs as a local
 cargo build --release
 ```
 
-The optimized binary is at `target/release/WinServiceHost.exe` (stripped, LTO-enabled, size-optimized).
+The optimized binary is at `target/release/still-here.exe` (stripped, LTO-enabled, size-optimized).
 
 ## Usage
 
 ```bash
 # Run hidden (default) — press Ctrl+Shift+F9 to toggle GUI, Q or Ctrl+C to quit
-WinServiceHost.exe
+still-here.exe
 
 # Run with GUI visible (useful for development)
-WinServiceHost.exe --visible
+still-here.exe --visible
 
 # Mouse only, no typing
-WinServiceHost.exe --no-typing
+still-here.exe --no-typing
 
 # Active 24/7 instead of business hours only
-WinServiceHost.exe --schedule always
+still-here.exe --schedule always
 
 # English phrases, subtle mouse, custom hours
-WinServiceHost.exe --language en --mouse-mode subtle --schedule-start 08:00 --schedule-end 17:00
+still-here.exe --language en --mouse-mode subtle --schedule-start 08:00 --schedule-end 17:00
 
 # Save current settings for next run
-WinServiceHost.exe --save-config
+still-here.exe --save-config
 ```
 
 ### CLI Options

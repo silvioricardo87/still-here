@@ -70,7 +70,7 @@ fn run_message_pump(shutdown: &'static AtomicBool) {
 /// is the first instance, or `None` if another instance already holds it.
 fn acquire_single_instance_lock() -> Option<HANDLE> {
     unsafe {
-        let handle = CreateMutexW(None, true, w!("Global\\WinServiceHost_SingleInstance")).ok()?;
+        let handle = CreateMutexW(None, true, w!("Global\\StillHere_SingleInstance")).ok()?;
         // ERROR_ALREADY_EXISTS (183) means another instance owns the mutex
         if windows::Win32::Foundation::GetLastError().0 == 183 {
             return None;
@@ -104,7 +104,7 @@ fn main() {
 
     if args.save_config {
         match config.save() {
-            Ok(_) => println!("Config saved to %TEMP%\\wsh.dat"),
+            Ok(_) => println!("Config saved to %TEMP%\\still-here.dat"),
             Err(e) => eprintln!("Failed to save config: {}", e),
         }
         return;

@@ -2,11 +2,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, SIZE, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateFontW, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, EndPaint,
-    FillRect, FrameRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn,
-    TextOutW, HFONT, HGDIOBJ, PAINTSTRUCT, TRANSPARENT,
+    FillRect, FrameRect, GetTextExtentPoint32W, InvalidateRect, SelectObject, SetBkMode,
+    SetTextColor, SetWindowRgn, TextOutW, HFONT, HGDIOBJ, PAINTSTRUCT, TRANSPARENT,
 };
 use windows::Win32::System::Registry::{
     RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
@@ -144,6 +144,9 @@ fn gui_strings(lang: &Language) -> &'static GuiStrings {
 
 const TIMER_ID: usize = 1;
 const TIMER_INTERVAL_MS: u32 = 2000;
+
+/// App version, taken from Cargo.toml at compile time.
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Extended window style: TOOLWINDOW hides from taskbar/Alt+Tab, TOPMOST keeps on top.
 const GUI_EX_STYLE: windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE =
@@ -683,6 +686,21 @@ fn handle_paint(hwnd: HWND) {
         SelectObject(hdc, HGDIOBJ(font_title.0));
     }
     draw_text(hdc, pad, y, s.title, theme.text);
+
+    // Version label, right-aligned on the title row
+    let version_text = format!("v{}", APP_VERSION);
+    let version_wide: Vec<u16> = version_text.encode_utf16().collect();
+    unsafe {
+        SelectObject(hdc, HGDIOBJ(font_small.0));
+    }
+    let mut version_size = SIZE::default();
+    unsafe {
+        let _ = GetTextExtentPoint32W(hdc, &version_wide, &mut version_size);
+    }
+    let version_x = client.right - pad - version_size.cx;
+    let version_y = y + scaled(6, scale);
+    draw_text(hdc, version_x, version_y, &version_text, theme.label);
+
     y += scaled(24, scale);
 
     // --- Status line with dot ---
@@ -1039,5 +1057,25 @@ mod tests {
             status_text_localized(scheduler::CYCLE_ACTIVE, false, s),
             "Active"
         );
+    }
+
+    #[test]
+    fn test_app_version_matches_cargo_pkg_version() {
+        // Constant must be exactly the Cargo.toml version, not a hardcoded string.
+        assert_eq!(APP_VERSION, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn test_app_version_is_semver_like() {
+        // Sanity check: MAJOR.MINOR.PATCH shape.
+        let parts: Vec<&str> = APP_VERSION.split('.').collect();
+        assert_eq!(parts.len(), 3, "expected 3-part semver, got {}", APP_VERSION);
+        for p in parts {
+            assert!(
+                p.chars().all(|c| c.is_ascii_digit()),
+                "non-numeric segment in version {}",
+                APP_VERSION
+            );
+        }
     }
 }
